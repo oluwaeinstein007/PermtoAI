@@ -1,0 +1,287 @@
+{
+  "info": {
+    "name": "PermitoAI REST API",
+    "description": "REST API endpoints for PermitoAI — AI-powered permit-to-work management system for Nigerian oil & gas operations.\n\nBase URL: {{base_url}} (default: http://localhost:3001)\n\n**Tools** — direct wrappers for each MCP tool:\n- HAZARD_SUGGEST: Identify workplace hazards using AI + historical incident data\n- RISK_ASSESS: Score hazards with rule-based risk matrix (likelihood × severity)\n- COMPLIANCE_CHECK: Validate against DPR EGASPIN, ISO 45001, IOGP\n- PERMIT_VALIDATE: Multi-layer validation (rule-based → semantic → compliance → anomaly)\n- ANOMALY_DETECT: Detect copy-paste, duplicates, suspicious patterns\n\n**Agent workflows** — orchestrated multi-step pipelines:\n- full-assessment: Complete pipeline (all 4 tools chained)\n- quick-assess: Fast 2-step pipeline (hazard-suggest → risk-assess)\n\nCore principle: AI assists, rules constrain, humans decide, logs remember.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "permito-ai-rest-api-v1"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string",
+      "description": "Base URL for the PermitoAI REST API server"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Server health check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Returns the API server status, version, and list of available tools."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": \"ok\",\n  \"service\": \"PermitoAI REST API\",\n  \"version\": \"1.0.0\",\n  \"timestamp\": \"2026-03-05T10:00:00.000Z\",\n  \"tools\": [\"HAZARD_SUGGEST\", \"RISK_ASSESS\", \"COMPLIANCE_CHECK\", \"PERMIT_VALIDATE\", \"ANOMALY_DETECT\"]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tools",
+      "description": "Direct wrappers for each MCP tool. Each endpoint mirrors the corresponding MCP tool exactly.",
+      "item": [
+        {
+          "name": "HAZARD_SUGGEST — Identify Hazards",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tools/hazard-suggest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tools", "hazard-suggest"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobType\": \"Hot Work\",\n  \"location\": \"Bonny Terminal, Rivers State\",\n  \"environment\": \"Onshore crude oil processing facility near active gas flares\",\n  \"equipment\": [\"Welding machine\", \"Angle grinder\", \"Gas detector\", \"Fire extinguisher\"],\n  \"contractor\": {\n    \"name\": \"SafeWeld Nigeria Ltd\",\n    \"tier\": 2\n  },\n  \"description\": \"Welding repair work on crude oil pipeline flange at Bonny Terminal. Adjacent hydrocarbon lines remain live during work.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Identifies 5-10 workplace hazards for a permit-to-work scenario using AI analysis, vector-based retrieval of DPR/IOGP regulations, and historical incident data from the Qdrant database.\n\n**Input:** JobContext\n**Returns:** Array of hazards with categories, likelihood/severity ratings, recommended controls, and DPR references."
+          },
+          "response": [
+            {
+              "name": "200 OK — Hazards identified",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"hazardCount\": 7,\n  \"hazards\": [\n    {\n      \"name\": \"Hydrocarbon vapour ignition\",\n      \"category\": \"chemical\",\n      \"likelihood\": 3,\n      \"severity\": 5,\n      \"recommendedControls\": [\n        \"Continuous gas monitoring with audible alarm\",\n        \"Hot work permit with area isolation\",\n        \"Fire watch posted throughout operation\",\n        \"Hydrocarbon leak test before ignition source\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 5.2.3 — Hot Work in Hydrocarbon Environments\",\n      \"explanation\": \"Adjacent live crude lines create significant vapour accumulation risk during welding operations.\"\n    }\n  ],\n  \"metadata\": {\n    \"regulationsUsed\": 5,\n    \"incidentsUsed\": 3,\n    \"promptTokens\": 1240,\n    \"completionTokens\": 890\n  }\n}"
+            },
+            {
+              "name": "400 Bad Request — Invalid body",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"error\": \"Invalid request body\",\n  \"details\": [\"jobType: Required\", \"equipment: Required\"]\n}"
+            }
+          ]
+        },
+        {
+          "name": "RISK_ASSESS — Score Hazards",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tools/risk-assess",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tools", "risk-assess"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hazards\": [\n    {\n      \"name\": \"H2S Exposure\",\n      \"category\": \"chemical\",\n      \"likelihood\": 3,\n      \"severity\": 2,\n      \"recommendedControls\": [\n        \"Personal H2S monitor worn at all times\",\n        \"Wind sock installed at work site\",\n        \"SCBA available on standby\",\n        \"Buddy system enforced\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 4.1.2 — H2S Safety Requirements\",\n      \"explanation\": \"Sour gas field operations carry inherent H2S risk from reservoir gases.\"\n    },\n    {\n      \"name\": \"Fall from Height during scaffold inspection\",\n      \"category\": \"physical\",\n      \"likelihood\": 2,\n      \"severity\": 3,\n      \"recommendedControls\": [\n        \"Full body harness with double lanyard\",\n        \"Scaffold inspection before use\",\n        \"Safety net installed below work area\"\n      ],\n      \"explanation\": \"Work at elevation on scaffold structures increases fall risk.\"\n    },\n    {\n      \"name\": \"Fire and explosion from welding sparks\",\n      \"category\": \"physical\",\n      \"likelihood\": 2,\n      \"severity\": 4,\n      \"recommendedControls\": [\n        \"Fire blanket around hot work area\",\n        \"Continuous gas monitoring\",\n        \"Fire extinguisher at work site\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 5.2.3\",\n      \"explanation\": \"Welding sparks near hydrocarbon-containing equipment create ignition risk.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Scores hazards against the risk matrix (likelihood × severity). Applies rule-based severity floor constraints:\n- H₂S: minimum severity 4\n- Explosion/asphyxiation: minimum severity 5\n- Confined space / fall from height: minimum severity 4\n- Hot work / dropped objects: minimum severity 3\n\nReturns risk levels: critical (≥15), high (≥10), medium (≥5), low (<5)."
+          },
+          "response": [
+            {
+              "name": "200 OK — Risk scores",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"summary\": {\n    \"critical\": 1,\n    \"high\": 1,\n    \"medium\": 1,\n    \"low\": 0\n  },\n  \"rulesApplied\": 1,\n  \"scoredHazards\": [\n    {\n      \"hazardName\": \"H2S Exposure\",\n      \"category\": \"chemical\",\n      \"likelihood\": 3,\n      \"severity\": 4,\n      \"riskScore\": 12,\n      \"riskLevel\": \"high\",\n      \"rationale\": \"Sour gas field operations carry inherent H2S risk. Severity adjusted from 2 to 4 by safety rule constraint. Reference: DPR EGASPIN Section 4.1.2.\",\n      \"ruleApplied\": true,\n      \"controls\": [\"Personal H2S monitor worn at all times\", \"Wind sock installed at work site\", \"SCBA available on standby\", \"Buddy system enforced\"]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "COMPLIANCE_CHECK — Regulatory Validation",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tools/compliance-check",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tools", "compliance-check"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobContext\": {\n    \"jobType\": \"Confined Space Entry\",\n    \"location\": \"Forcados Export Terminal, Delta State\",\n    \"environment\": \"Offshore crude oil storage tank — inert atmosphere\",\n    \"equipment\": [\"SCBA breathing apparatus\", \"Gas detector (4-gas monitor)\", \"Rescue tripod and winch\", \"Intrinsically safe lighting\"],\n    \"contractor\": {\n      \"name\": \"Apex Industrial Services\",\n      \"tier\": 1\n    },\n    \"description\": \"Internal inspection and cleaning of crude oil storage tank. Tank has been purged with nitrogen and gas-freed.\"\n  },\n  \"hazards\": [\n    {\n      \"name\": \"Oxygen-deficient atmosphere\",\n      \"category\": \"chemical\",\n      \"likelihood\": 4,\n      \"severity\": 5,\n      \"recommendedControls\": [\n        \"Continuous O2 monitoring — alarm at <19.5%\",\n        \"SCBA worn by all entrants\",\n        \"Standby man posted at entry point\",\n        \"Emergency rescue plan in place\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 6.4.1 — Confined Space Entry Requirements\",\n      \"explanation\": \"Nitrogen purging displaces oxygen, creating life-threatening atmosphere if monitoring fails.\"\n    },\n    {\n      \"name\": \"Residual hydrocarbon vapours\",\n      \"category\": \"chemical\",\n      \"likelihood\": 3,\n      \"severity\": 4,\n      \"recommendedControls\": [\n        \"LEL monitoring — stop work above 10% LEL\",\n        \"Continuous forced air ventilation\",\n        \"Intrinsically safe equipment only\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 5.3.2\",\n      \"explanation\": \"Residual crude vapours may persist despite gas-freeing procedure.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Validates the permit against three regulatory frameworks:\n- **DPR EGASPIN** — Nigerian Department of Petroleum Resources regulations\n- **ISO 45001** — Occupational Health & Safety Management Systems\n- **IOGP** — International Association of Oil & Gas Producers standards\n\nUses Google Gemini AI as a regulatory compliance expert."
+          },
+          "response": [
+            {
+              "name": "200 OK — Compliance results",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"overallCompliant\": false,\n  \"standards\": [\n    {\n      \"standard\": \"DPR EGASPIN\",\n      \"compliant\": true,\n      \"findings\": [],\n      \"recommendations\": [\"Ensure rescue equipment is tested within 30 days\"]\n    },\n    {\n      \"standard\": \"ISO 45001\",\n      \"compliant\": false,\n      \"findings\": [\"No documented emergency rescue drill within last 6 months\"],\n      \"recommendations\": [\"Conduct confined space rescue drill before entry\", \"Document drill in safety management system\"]\n    },\n    {\n      \"standard\": \"IOGP\",\n      \"compliant\": true,\n      \"findings\": [],\n      \"recommendations\": []\n    }\n  ],\n  \"metadata\": {\n    \"promptTokens\": 980,\n    \"completionTokens\": 640\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "PERMIT_VALIDATE — Multi-Layer Validation",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tools/permit-validate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tools", "permit-validate"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobContext\": {\n    \"jobType\": \"Hot Work\",\n    \"location\": \"Warri Refinery, Delta State\",\n    \"environment\": \"Crude distillation unit — active processing area\",\n    \"equipment\": [\"Arc welder\", \"Angle grinder\", \"Fire extinguisher (CO2)\", \"4-gas monitor\"],\n    \"contractor\": {\n      \"name\": \"Steelcraft Nigeria\",\n      \"tier\": 2\n    },\n    \"description\": \"Welding repair on heat exchanger shell. Adjacent process lines contain naphtha at 120°C.\"\n  },\n  \"hazards\": [\n    {\n      \"name\": \"Naphtha vapour ignition from welding sparks\",\n      \"category\": \"chemical\",\n      \"likelihood\": 4,\n      \"severity\": 5,\n      \"recommendedControls\": [\n        \"Gas test every 30 minutes during work\",\n        \"Fire watch with extinguisher\",\n        \"Hot work permit with area exclusion zone\",\n        \"Standby fire tender\"\n      ],\n      \"dprReference\": \"DPR EGASPIN Section 5.2.3\",\n      \"explanation\": \"Hot work near naphtha service lines at elevated temperature presents catastrophic fire/explosion risk.\"\n    },\n    {\n      \"name\": \"Burns from hot surfaces and welding arc\",\n      \"category\": \"physical\",\n      \"likelihood\": 3,\n      \"severity\": 3,\n      \"recommendedControls\": [\n        \"Leather welding gloves and apron\",\n        \"Full face shield\",\n        \"Fire-resistant coveralls\",\n        \"Barrier warning signs for adjacent workers\"\n      ],\n      \"explanation\": \"Direct contact with welding arc or hot heat exchanger surface can cause serious burns.\"\n    },\n    {\n      \"name\": \"Fume inhalation — welding fumes and metal oxides\",\n      \"category\": \"chemical\",\n      \"likelihood\": 4,\n      \"severity\": 3,\n      \"recommendedControls\": [\n        \"Forced local exhaust ventilation at weld point\",\n        \"Half-face respirator (P100 filter)\",\n        \"Work upwind of fume source where possible\"\n      ],\n      \"explanation\": \"Welding on carbon steel releases iron oxide fumes and manganese compounds, toxic at high concentrations.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Runs four validation layers in sequence:\n1. **Layer 1 (Rule-based):** Fast checks — minimum hazards, controls present, DPR references for high-severity\n2. **Layer 2 (Semantic):** AI analyzes logical consistency and completeness\n3. **Layer 3 (Compliance):** Standards validation against DPR/ISO/IOGP\n4. **Layer 4 (Anomaly):** Detects copy-paste, duplicates, suspicious patterns\n\nReturns recommendation: `Recommend Approval` or `Flag for Review`."
+          },
+          "response": [
+            {
+              "name": "200 OK — Validation results",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"recommendation\": \"Flag for Review\",\n  \"allPassed\": false,\n  \"totalIssues\": 2,\n  \"layers\": [\n    {\n      \"layer\": \"rule_based\",\n      \"passed\": true,\n      \"issueCount\": 0,\n      \"issues\": [],\n      \"confidence\": 1.0\n    },\n    {\n      \"layer\": \"semantic\",\n      \"passed\": false,\n      \"issueCount\": 1,\n      \"issues\": [\"SIMOPS conflict not assessed — naphtha lines remain active during hot work\"],\n      \"confidence\": 0.85\n    },\n    {\n      \"layer\": \"compliance\",\n      \"passed\": false,\n      \"issueCount\": 1,\n      \"issues\": [\"ISO 45001 requires documented risk assessment sign-off by HSE Officer\"],\n      \"confidence\": 0.9\n    },\n    {\n      \"layer\": \"anomaly\",\n      \"passed\": true,\n      \"issueCount\": 0,\n      \"issues\": [],\n      \"confidence\": 0.9\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "ANOMALY_DETECT — Detect Suspicious Patterns",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tools/anomaly-detect",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tools", "anomaly-detect"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hazards\": [\n    {\n      \"name\": \"Generic hazard 1\",\n      \"category\": \"physical\",\n      \"likelihood\": 2,\n      \"severity\": 2,\n      \"recommendedControls\": [\"Wear PPE\", \"Follow procedures\"],\n      \"explanation\": \"Standard risk.\"\n    },\n    {\n      \"name\": \"Generic hazard 2\",\n      \"category\": \"physical\",\n      \"likelihood\": 2,\n      \"severity\": 2,\n      \"recommendedControls\": [\"Wear PPE\", \"Follow procedures\"],\n      \"explanation\": \"Standard risk.\"\n    },\n    {\n      \"name\": \"Generic hazard 3\",\n      \"category\": \"physical\",\n      \"likelihood\": 2,\n      \"severity\": 2,\n      \"recommendedControls\": [\"Wear PPE\", \"Follow procedures\"],\n      \"explanation\": \"Standard risk.\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Detects suspicious patterns in hazard assessments that suggest copy-pasting or negligence:\n- Duplicate hazard names\n- All identical likelihood/severity ratings (copy-paste indicator)\n- All hazards rated as low risk (understatement)\n- Identical control measures across all hazards\n\nConfidence score: 0.9 (rule-based, deterministic)."
+          },
+          "response": [
+            {
+              "name": "200 OK — Anomalies detected",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"anomaliesDetected\": true,\n  \"issueCount\": 3,\n  \"issues\": [\n    \"All hazards have identical likelihood and severity ratings — possible copy-paste. Review individually.\",\n    \"All hazards classified as low risk. Verify assessments are thorough and not understated.\",\n    \"All hazards share identical control measures — controls should be hazard-specific.\"\n  ],\n  \"confidence\": 0.9\n}"
+            },
+            {
+              "name": "200 OK — No anomalies",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"anomaliesDetected\": false,\n  \"issueCount\": 0,\n  \"issues\": [],\n  \"confidence\": 0.9\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agent",
+      "description": "Orchestrated multi-step AI agent workflows that chain multiple tools together in a single request.",
+      "item": [
+        {
+          "name": "List Available Tools & Workflows",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/tools",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "tools"]
+            },
+            "description": "Returns metadata for all available MCP tools and agent workflows, including endpoint paths, descriptions, and expected input schemas."
+          },
+          "response": []
+        },
+        {
+          "name": "Full Assessment — Complete Pipeline",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/full-assessment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "full-assessment"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobType\": \"Confined Space Entry\",\n  \"location\": \"QIT Terminal, Imo State\",\n  \"environment\": \"Crude oil pipeline pig trap — sour service, H2S present\",\n  \"equipment\": [\n    \"SCBA breathing apparatus\",\n    \"4-gas monitor (O2, LEL, H2S, CO)\",\n    \"Intrinsically safe torch\",\n    \"Rescue tripod and winch\",\n    \"Non-sparking tools\"\n  ],\n  \"contractor\": {\n    \"name\": \"Pioneer Pipeline Services\",\n    \"tier\": 1\n  },\n  \"description\": \"Retrieval of stuck pig from pipeline trap on sour crude service. Trap diameter 36 inches. Last pig passage 6 months ago. H2S concentration measured at 180 ppm at trap opening.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "**Full 4-step permit assessment pipeline:**\n\n1. **HAZARD_SUGGEST** — AI identifies hazards using RAG (regulations + historical incidents)\n2. **RISK_ASSESS** — Scores hazards with rule-based safety constraints\n3. **COMPLIANCE_CHECK** — Validates against DPR EGASPIN, ISO 45001, IOGP *(parallel with step 4)*\n4. **PERMIT_VALIDATE** — Multi-layer validation *(parallel with step 3)*\n\nReturns all step results plus an overall recommendation.\n\n⚠️ Takes 15-30 seconds due to multiple AI calls."
+          },
+          "response": [
+            {
+              "name": "200 OK — Full assessment result",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"jobContext\": {\n    \"jobType\": \"Confined Space Entry\",\n    \"location\": \"QIT Terminal, Imo State\",\n    \"environment\": \"Crude oil pipeline pig trap — sour service, H2S present\"\n  },\n  \"recommendation\": \"Flag for Review\",\n  \"steps\": {\n    \"hazardSuggest\": {\n      \"hazardCount\": 8,\n      \"hazards\": [],\n      \"metadata\": { \"regulationsUsed\": 5, \"incidentsUsed\": 3, \"promptTokens\": 1400, \"completionTokens\": 920 }\n    },\n    \"riskAssess\": {\n      \"summary\": { \"critical\": 2, \"high\": 3, \"medium\": 2, \"low\": 1 },\n      \"rulesApplied\": 3,\n      \"scoredHazards\": []\n    },\n    \"complianceCheck\": {\n      \"overallCompliant\": false,\n      \"standards\": []\n    },\n    \"permitValidate\": {\n      \"allPassed\": false,\n      \"totalIssues\": 2,\n      \"layers\": []\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Quick Assess — Hazards + Risk Only",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/quick-assess",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "quick-assess"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobType\": \"Electrical Isolation (LOTO)\",\n  \"location\": \"Escravos Gas Plant, Delta State\",\n  \"environment\": \"High-voltage switchgear room — 33kV distribution panel\",\n  \"equipment\": [\n    \"Voltage tester (non-contact)\",\n    \"Insulated gloves (Class 4)\",\n    \"Insulated tools\",\n    \"Lockout/tagout kit\",\n    \"Arc flash suit\"\n  ],\n  \"contractor\": {\n    \"name\": \"Electra Engineering Nigeria\",\n    \"tier\": 2\n  },\n  \"description\": \"Scheduled maintenance of 33kV switchgear panel. Full isolation required. System supplies power to gas compression train.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "**Fast 2-step assessment:**\n\n1. **HAZARD_SUGGEST** — AI identifies hazards\n2. **RISK_ASSESS** — Scores hazards with safety constraints\n\nIf critical or high risks are detected, `requiresFullAssessment: true` is returned as a signal to run the full pipeline.\n\nFaster than full-assessment (~8-12 seconds)."
+          },
+          "response": [
+            {
+              "name": "200 OK — Quick assessment result",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"jobContext\": {\n    \"jobType\": \"Electrical Isolation (LOTO)\",\n    \"location\": \"Escravos Gas Plant, Delta State\"\n  },\n  \"recommendation\": \"Requires Full Assessment\",\n  \"requiresFullAssessment\": true,\n  \"hazardCount\": 6,\n  \"riskSummary\": {\n    \"critical\": 1,\n    \"high\": 2,\n    \"medium\": 2,\n    \"low\": 1\n  },\n  \"hazards\": [],\n  \"scoredHazards\": [],\n  \"metadata\": {\n    \"regulationsUsed\": 4,\n    \"incidentsUsed\": 2\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
