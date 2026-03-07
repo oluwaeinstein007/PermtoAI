@@ -115,9 +115,9 @@ agentRouter.post("/full-assessment", async (c) => {
         role: "user",
         content: `Evaluate compliance:
 JOB: ${jobContext.jobType}
-LOCATION: ${jobContext.location}
-ENVIRONMENT: ${jobContext.environment}
-EQUIPMENT: ${jobContext.equipment.join(", ")}
+LOCATION: ${jobContext.location ?? "Not specified"}
+ENVIRONMENT: ${jobContext.environment ?? "Not specified"}
+EQUIPMENT: ${(jobContext.equipment ?? []).join(", ") || "Not specified"}
 CONTRACTOR: ${jobContext.contractor?.name ?? "N/A"} (Tier ${jobContext.contractor?.tier ?? "N/A"})
 
 HAZARDS:

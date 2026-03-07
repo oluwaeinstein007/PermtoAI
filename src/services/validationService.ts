@@ -83,7 +83,7 @@ export class ValidationService {
     }
 
     // Equipment list must not be empty
-    if (context.equipment.length === 0) {
+    if ((context.equipment ?? []).length === 0) {
       issues.push("Equipment list is empty. Specify equipment for proper hazard assessment.");
     }
 
@@ -121,7 +121,7 @@ export class ValidationService {
           content: `Validate this hazard assessment:
 
 JOB: ${context.jobType} at ${context.location} (${context.environment})
-EQUIPMENT: ${context.equipment.join(", ")}
+EQUIPMENT: ${(context.equipment ?? []).join(", ") || "Not specified"}
 
 IDENTIFIED HAZARDS:
 ${hazardSummary}

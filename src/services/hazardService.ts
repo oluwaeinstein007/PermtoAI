@@ -24,9 +24,9 @@ function buildHazardPrompt(
 
 JOB CONTEXT:
 - Job Type: ${context.jobType}
-- Location: ${context.location}
-- Environment: ${context.environment}
-- Equipment: ${context.equipment.join(", ")}
+- Location: ${context.location ?? "Not specified"}
+- Environment: ${context.environment ?? "Not specified"}
+- Equipment: ${(context.equipment ?? []).join(", ") || "Not specified"}
 - Contractor: ${context.contractor?.name ?? "N/A"} (Tier ${context.contractor?.tier ?? "N/A"})
 ${context.description ? `- Description: ${context.description}` : ""}
 
@@ -93,7 +93,7 @@ export class HazardService {
 
   async suggestHazards(context: JobContext): Promise<HazardSuggestionResult> {
     // Build embedding from job context
-    const contextText = `${context.jobType} ${context.location} ${context.environment} ${context.equipment.join(" ")} ${context.description ?? ""}`;
+    const contextText = `${context.jobType} ${context.location ?? ""} ${context.environment ?? ""} ${(context.equipment ?? []).join(" ")} ${context.description ?? ""}`;
     let queryVector: number[];
 
     try {
@@ -164,34 +164,105 @@ export class HazardService {
   /**
    * Missed hazard guardrail: merge hazards discovered from similar incidents
    * that the AI may have missed.
+   *
+   * Only adds hazards that are:
+   * - From incidents above the similarity threshold
+   * - Not semantically duplicated by an existing AI-generated hazard
+   * - Not a generic outcome term (e.g. "Serious Injury")
+   * Up to MAX_MERGED_FROM_INCIDENTS additional hazards are added.
    */
+  private readonly INCIDENT_SIMILARITY_THRESHOLD = 0.70;
+  private readonly MAX_MERGED_FROM_INCIDENTS = 5;
+
+  // Terms that describe outcomes or consequences rather than hazards
+  private readonly OUTCOME_TERMS = new Set([
+    "serious injury",
+    "injury",
+    "fatality",
+    "death",
+    "incident",
+  ]);
+
+  // Keywords that indicate a chemical/atmospheric hazard
+  private readonly CHEMICAL_KEYWORDS = [
+    "gas", "vapor", "vapour", "chemical", "h2s", "co", "oxygen",
+    "toxic", "flammable", "explosive", "lel", "fume", "asphyxia",
+    "asphyxiation", "atmosphere", "atmospheric",
+  ];
+
+  private inferCategory(hazardName: string): Hazard["category"] {
+    const lower = hazardName.toLowerCase();
+    if (this.CHEMICAL_KEYWORDS.some((kw) => lower.includes(kw))) {
+      return "chemical";
+    }
+    return "physical";
+  }
+
+  /**
+   * Returns true if the candidate hazard is semantically covered by an
+   * existing hazard name, using significant-word overlap.
+   */
+  private isDuplicate(candidate: string, existingNames: Set<string>): boolean {
+    const lower = candidate.toLowerCase();
+    if (existingNames.has(lower)) return true;
+
+    const STOP_WORDS = new Set(["from", "with", "that", "this", "into", "over", "under", "and", "the"]);
+    const candidateWords = lower
+      .split(/[\s/(),]+/)
+      .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+
+    for (const existing of existingNames) {
+      if (existing.includes(lower) || lower.includes(existing)) return true;
+
+      const existingWords = existing
+        .split(/[\s/(),]+/)
+        .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+
+      if (candidateWords.length === 0) continue;
+      const overlap = candidateWords.filter((w) => existingWords.includes(w)).length;
+      // If more than half the candidate's key words appear in an existing hazard, treat as duplicate
+      if (overlap / candidateWords.length > 0.5) return true;
+    }
+
+    return false;
+  }
+
+  private isOutcomeTerm(hazardName: string): boolean {
+    return this.OUTCOME_TERMS.has(hazardName.toLowerCase());
+  }
+
   private mergeIncidentHazards(
     aiHazards: Hazard[],
     incidents: VectorSearchResult[]
   ): Hazard[] {
-    const existingNames = new Set(
-      aiHazards.map((h) => h.name.toLowerCase())
-    );
+    const existingNames = new Set(aiHazards.map((h) => h.name.toLowerCase()));
+    let mergedCount = 0;
 
     for (const incident of incidents) {
-      const incidentHazards = incident.payload["hazard_names"] as
-        | string[]
-        | undefined;
+      if (incident.score < this.INCIDENT_SIMILARITY_THRESHOLD) continue;
+
+      const incidentHazards = incident.payload["hazard_names"] as string[] | undefined;
       if (!incidentHazards) continue;
 
       for (const hazardName of incidentHazards) {
-        if (!existingNames.has(hazardName.toLowerCase())) {
-          existingNames.add(hazardName.toLowerCase());
-          aiHazards.push({
-            name: hazardName,
-            category: "physical",
-            likelihood: 2,
-            severity: 3,
-            recommendedControls: ["Review historical incident data for specific controls"],
-            explanation: `Identified from similar historical incident (similarity: ${incident.score.toFixed(2)}). Requires manual review.`,
-          });
-        }
+        if (mergedCount >= this.MAX_MERGED_FROM_INCIDENTS) break;
+        if (this.isOutcomeTerm(hazardName)) continue;
+        if (this.isDuplicate(hazardName, existingNames)) continue;
+
+        existingNames.add(hazardName.toLowerCase());
+        mergedCount++;
+
+        aiHazards.push({
+          name: hazardName,
+          category: this.inferCategory(hazardName),
+          likelihood: 2,
+          severity: 3,
+          recommendedControls: ["Review historical incident data for specific controls"],
+          explanation: `Identified from similar historical incident (similarity: ${incident.score.toFixed(2)}). Requires manual review.`,
+        });
       }
+
+      if (mergedCount >= this.MAX_MERGED_FROM_INCIDENTS) break;
     }
 
     return aiHazards;

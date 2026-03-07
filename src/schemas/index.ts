@@ -37,9 +37,9 @@ export type RiskScore = z.infer<typeof RiskScoreSchema>;
 // ─── Job Context (input to hazard engine) ───
 export const JobContextSchema = z.object({
   jobType: z.string().describe("Type of job, e.g. 'Hot Work', 'Confined Space Entry'"),
-  location: z.string().describe("Work location"),
-  environment: z.string().describe("Environmental conditions, e.g. 'Offshore platform', 'Sour gas field'"),
-  equipment: z.array(z.string()).describe("Equipment being used"),
+  location: z.string().optional().describe("Work location"),
+  environment: z.string().optional().describe("Environmental conditions, e.g. 'Offshore platform', 'Sour gas field'"),
+  equipment: z.array(z.string()).optional().describe("Equipment being used"),
   contractor: z
     .object({
       name: z.string(),

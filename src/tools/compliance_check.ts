@@ -42,9 +42,9 @@ Evaluate the permit against all three frameworks. Return JSON with key "standard
           content: `Evaluate this permit for regulatory compliance:
 
 JOB: ${args.jobContext.jobType}
-LOCATION: ${args.jobContext.location}
-ENVIRONMENT: ${args.jobContext.environment}
-EQUIPMENT: ${args.jobContext.equipment.join(", ")}
+LOCATION: ${args.jobContext.location ?? "Not specified"}
+ENVIRONMENT: ${args.jobContext.environment ?? "Not specified"}
+EQUIPMENT: ${(args.jobContext.equipment ?? []).join(", ") || "Not specified"}
 CONTRACTOR: ${args.jobContext.contractor?.name ?? "N/A"} (Tier ${args.jobContext.contractor?.tier ?? "N/A"})
 
 HAZARD ASSESSMENT:
