@@ -14,6 +14,9 @@ FROM node:20-alpine AS runner
 
 RUN npm install -g pnpm@10.28.1
 
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
 # Run as non-root
 RUN addgroup -S permito && adduser -S permito -G permito
 
