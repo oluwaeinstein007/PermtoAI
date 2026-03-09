@@ -1,14 +1,14 @@
 {
   "info": {
     "name": "PermitoAI REST API",
-    "description": "REST API endpoints for PermitoAI — AI-powered permit-to-work management system for Nigerian oil & gas operations.\n\nBase URL: {{base_url}} (default: http://localhost:3001)\n\n**Tools** — direct wrappers for each MCP tool:\n- HAZARD_SUGGEST: Identify workplace hazards using AI + historical incident data\n- RISK_ASSESS: Score hazards with rule-based risk matrix (likelihood × severity)\n- COMPLIANCE_CHECK: Validate against DPR EGASPIN, ISO 45001, IOGP\n- PERMIT_VALIDATE: Multi-layer validation (rule-based → semantic → compliance → anomaly)\n- ANOMALY_DETECT: Detect copy-paste, duplicates, suspicious patterns\n\n**Agent workflows** — orchestrated multi-step pipelines:\n- full-assessment: Complete pipeline (all 4 tools chained)\n- quick-assess: Fast 2-step pipeline (hazard-suggest → risk-assess)\n\nCore principle: AI assists, rules constrain, humans decide, logs remember.",
+    "description": "REST API endpoints for PermitoAI — AI-powered permit-to-work management system for Nigerian oil & gas operations.\n\nBase URL: {{base_url}} (default: http://localhost:4000)\n\n**Tools** — direct wrappers for each MCP tool:\n- HAZARD_SUGGEST: Identify workplace hazards using AI + historical incident data\n- RISK_ASSESS: Score hazards with rule-based risk matrix (likelihood × severity)\n- COMPLIANCE_CHECK: Validate against DPR EGASPIN, ISO 45001, IOGP\n- PERMIT_VALIDATE: Multi-layer validation (rule-based → semantic → compliance → anomaly)\n- ANOMALY_DETECT: Detect copy-paste, duplicates, suspicious patterns\n\n**Agent workflows** — orchestrated multi-step pipelines:\n- full-assessment: Complete pipeline (all 4 tools chained)\n- quick-assess: Fast 2-step pipeline (hazard-suggest → risk-assess)\n\nCore principle: AI assists, rules constrain, humans decide, logs remember.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_postman_id": "permito-ai-rest-api-v1"
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:3001",
+      "value": "http://localhost:4000",
       "type": "string",
       "description": "Base URL for the PermitoAI REST API server"
     }

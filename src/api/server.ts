@@ -40,7 +40,7 @@ app.notFound((c) => {
   return c.json({ success: false, error: `Route not found: ${c.req.path}` }, 404);
 });
 
-const port = parseInt(process.env.API_PORT ?? "3001", 10);
+const port = parseInt(process.env.API_PORT ?? "4000", 10);
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`\nPermitoAI REST API running on http://localhost:${port}`);

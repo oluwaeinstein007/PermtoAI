@@ -1,6 +1,6 @@
 # REST API Reference
 
-PermitoAI REST API — port `3001` by default (configurable via `API_PORT` env var).
+PermitoAI REST API — port `4000` by default (configurable via `API_PORT` env var).
 
 All requests and responses use `Content-Type: application/json`. All responses include a top-level `success` boolean.
 
@@ -9,7 +9,7 @@ All requests and responses use `Content-Type: application/json`. All responses i
 ## Base URL
 
 ```
-http://localhost:3001
+http://localhost:4000
 ```
 
 ---

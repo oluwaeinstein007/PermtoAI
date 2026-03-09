@@ -59,7 +59,7 @@ AI_TEMPERATURE=0
 
 # Server ports (optional)
 PORT=3000        # MCP HTTP server
-API_PORT=3001    # REST API server
+API_PORT=4000    # REST API server
 ```
 
 ### 3. Seed the vector database
@@ -73,7 +73,7 @@ pnpm seed
 ### 4. Start the servers
 
 ```bash
-# REST API server (port 3001)
+# REST API server (port 4000)
 pnpm api
 
 # MCP server — stdio transport (for Claude/LLM integration)
@@ -113,7 +113,7 @@ PermitoAI/
 │   │   └── vectorService.ts        # Qdrant query wrapper
 │   │
 │   └── api/                        # REST API layer
-│       ├── server.ts               # Hono HTTP server (port 3001)
+│       ├── server.ts               # Hono HTTP server (port 4000)
 │       ├── middleware/
 │       │   └── errorHandler.ts     # Global error handling
 │       └── routes/
@@ -209,7 +209,7 @@ Returns `requiresFullAssessment: true` if critical or high risks are detected.
 
 ## API Endpoints
 
-The REST API runs on port `3001` by default. See [docs/api.md](docs/api.md) for the full reference.
+The REST API runs on port `4000` by default. See [docs/api.md](docs/api.md) for the full reference.
 
 ```
 GET  /api/v1/health
@@ -274,6 +274,6 @@ PermitoAI is designed for safety-critical environments. Key decisions:
 ```bash
 pnpm start         # Start MCP server (stdio transport)
 pnpm start:http    # Start MCP server (HTTP, port 3000)
-pnpm api           # Start REST API server (port 3001)
+pnpm api           # Start REST API server (port 4000)
 pnpm seed          # Seed Qdrant with regulations and incident data
 ```

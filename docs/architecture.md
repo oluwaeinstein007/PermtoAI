@@ -12,7 +12,7 @@ PermitoAI has two independent server processes that can run concurrently:
 │                                                         │
 │   ┌──────────────────┐    ┌──────────────────────────┐  │
 │   │   MCP Server     │    │      REST API Server     │  │
-│   │   (port 3000)    │    │      (port 3001)         │  │
+│   │   (port 3000)    │    │      (port 4000)         │  │
 │   │   FastMCP        │    │      Hono                │  │
 │   │   stdio / HTTP   │    │      @hono/node-server   │  │
 │   └────────┬─────────┘    └───────────┬──────────────┘  │
