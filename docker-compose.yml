@@ -52,7 +52,7 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-3072}
       # Qdrant (override host to use internal Docker network)
-      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_URL: ${QDRANT_HOST:-http://qdrant:6333}
       QDRANT_KEY: ${QDRANT_KEY}
       QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-permito_regulations}
       # REST API
