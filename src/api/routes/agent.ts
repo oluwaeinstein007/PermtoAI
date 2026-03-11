@@ -1,9 +1,11 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { JobContextSchema } from "../../schemas/index.js";
 import { HazardService } from "../../services/hazardService.js";
 import { RiskScoringService } from "../../services/riskScoringService.js";
 import { ValidationService } from "../../services/validationService.js";
 import { chatCompletion } from "../../services/embeddingService.js";
+import { checkSimops } from "../../services/simopsService.js";
 
 const agentRouter = new Hono();
 
@@ -55,6 +57,22 @@ agentRouter.get("/tools", (c) => {
           "Detect copy-pasted assessments, duplicate hazards, identical ratings, and suspicious patterns in hazard assessments.",
         input: "{ hazards: Hazard[] }",
       },
+      {
+        name: "SIMOPS_CHECK",
+        endpoint: "POST /api/v1/tools/simops-check",
+        description:
+          "Check a new permit request for SIMOPS (Simultaneous Operations) conflicts against existing permits. Detects schedule conflicts (same type + area + overlapping dates) and incompatible work type pairs (e.g. Hot Work + Confined Space Entry).",
+        input: "{ request: PermitRequest, permits: ExistingPermit[] }",
+        inputSchema: {
+          request: {
+            startDate: "string (ISO date or datetime)",
+            endDate: "string (ISO date or datetime)",
+            workType: "string (e.g. 'Hot Work', 'Confined Space Entry')",
+            workArea: "string | null (optional)",
+          },
+          permits: "ExistingPermit[] — list of active/draft permits to check against",
+        },
+      },
     ],
     workflows: [
       {
@@ -70,6 +88,15 @@ agentRouter.get("/tools", (c) => {
         description:
           "Fast two-step assessment: hazard-suggest → risk-assess. Flags if full assessment is needed based on risk levels.",
         input: "JobContext",
+      },
+      {
+        name: "simops-assess",
+        endpoint: "POST /api/v1/agent/simops-assess",
+        description:
+          "Full SIMOPS workflow: (1) detect schedule conflicts and incompatible work type pairs, " +
+          "(2) suggest hazards for the requested work type and any conflicting types in parallel, " +
+          "(3) score all hazards, (4) AI generates a consolidated SIMOPS safety briefing and recommendation.",
+        input: "{ request: PermitRequest, permits: ExistingPermit[], jobContext?: Partial<JobContext> }",
       },
     ],
   });
@@ -253,6 +280,225 @@ agentRouter.post("/quick-assess", async (c) => {
     metadata: {
       regulationsUsed: hazardResult.regulationsUsed,
       incidentsUsed: hazardResult.incidentsUsed,
+    },
+  });
+});
+
+// ─── SIMOPS schemas (mirrors tools.ts, kept local to avoid circular deps) ────
+const AgentPermitRequestSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  workType: z.string(),
+  workArea: z.string().nullable().optional(),
+});
+
+const AgentExistingPermitSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  type: z.string().optional(),
+  status: z.string(),
+  workType: z.string(),
+  workArea: z.string().nullable().optional(),
+  startDate: z.string(),
+  endDate: z.string(),
+  jobType: z.string().optional(),
+});
+
+const SimopsAssessBody = z.object({
+  request: AgentPermitRequestSchema,
+  permits: z.array(AgentExistingPermitSchema),
+  // Optional extra context to enrich the hazard suggestion step
+  jobContext: JobContextSchema.partial().optional(),
+});
+
+// POST /api/v1/agent/simops-assess
+// Workflow:
+//   Step 1 — checkSimops (schedule conflicts + incompatibility flags)
+//   Step 2 — suggestHazards for request.workType + each unique conflicting workType (parallel)
+//   Step 3 — scoreHazards on combined hazard list
+//   Step 4 — AI SIMOPS safety briefing
+agentRouter.post("/simops-assess", async (c) => {
+  const body = await c.req.json();
+  const { request, permits, jobContext: extraContext } = SimopsAssessBody.parse(body);
+
+  console.log(
+    `[API] Agent simops-assess started — workType="${request.workType}" against ${permits.length} permit(s)`
+  );
+
+  // ── Step 1: SIMOPS conflict check ─────────────────────────────────────────
+  console.log("[API] Step 1/4 — Running SIMOPS conflict check...");
+  const simopsResult = checkSimops(request, permits);
+
+  // Collect unique work types that conflict with the request (for hazard enrichment)
+  const conflictingWorkTypes = [
+    ...new Set([
+      ...simopsResult.simopsFlags.flags.map((f) => f.conflictingWorkType),
+    ]),
+  ].filter((wt) => wt.toLowerCase() !== request.workType.toLowerCase());
+
+  // ── Step 2: Hazard suggestions (parallel) ─────────────────────────────────
+  console.log(
+    `[API] Step 2/4 — Suggesting hazards for ${1 + conflictingWorkTypes.length} work type(s)...`
+  );
+  const hazardService = new HazardService();
+  const riskService = new RiskScoringService();
+
+  const baseContext = {
+    jobType: request.workType,
+    location: extraContext?.location,
+    environment: extraContext?.environment,
+    equipment: extraContext?.equipment,
+    contractor: extraContext?.contractor,
+    description: extraContext?.description,
+  };
+
+  const hazardJobs = [
+    hazardService.suggestHazards(baseContext),
+    ...conflictingWorkTypes.map((wt) =>
+      hazardService.suggestHazards({ ...baseContext, jobType: wt })
+    ),
+  ];
+
+  const hazardResults = await Promise.all(hazardJobs);
+
+  // Merge hazards — deduplicate by name (case-insensitive)
+  const seenNames = new Set<string>();
+  const allHazards = hazardResults.flatMap((r) => r.hazards).filter((h) => {
+    const key = h.name.toLowerCase();
+    if (seenNames.has(key)) return false;
+    seenNames.add(key);
+    return true;
+  });
+
+  // ── Step 3: Score all hazards ─────────────────────────────────────────────
+  console.log("[API] Step 3/4 — Scoring hazards...");
+  const scoredHazards = riskService.scoreHazards(allHazards);
+
+  const riskSummary = {
+    critical: scoredHazards.filter((s) => s.riskLevel === "critical").length,
+    high: scoredHazards.filter((s) => s.riskLevel === "high").length,
+    medium: scoredHazards.filter((s) => s.riskLevel === "medium").length,
+    low: scoredHazards.filter((s) => s.riskLevel === "low").length,
+  };
+
+  // ── Step 4: AI SIMOPS safety briefing ────────────────────────────────────
+  console.log("[API] Step 4/4 — Generating SIMOPS safety briefing...");
+
+  const conflictSummaryText =
+    simopsResult.scheduleConflicts.count > 0
+      ? `SCHEDULE CONFLICTS (${simopsResult.scheduleConflicts.count}):\n` +
+        simopsResult.scheduleConflicts.permits
+          .map(
+            (p) =>
+              `  - Permit #${p.permitId} [${p.status}]: ${p.workType} in "${p.workArea ?? "N/A"}" ` +
+              `overlaps from ${p.overlapStart} to ${p.overlapEnd}`
+          )
+          .join("\n")
+      : "No schedule conflicts detected.";
+
+  const simopsFlagText =
+    simopsResult.simopsFlags.count > 0
+      ? `SIMOPS INCOMPATIBILITIES (${simopsResult.simopsFlags.count}):\n` +
+        simopsResult.simopsFlags.flags
+          .map(
+            (f) =>
+              `  - Permit #${f.permitId} [${f.severity.toUpperCase()}]: "${f.requestWorkType}" vs "${f.conflictingWorkType}" — ${f.reason}`
+          )
+          .join("\n")
+      : "No SIMOPS incompatibilities detected.";
+
+  const hazardText = scoredHazards
+    .slice(0, 15) // cap prompt length
+    .map(
+      (s) =>
+        `  ${s.hazard.name} [${s.riskLevel.toUpperCase()} risk ${s.riskScore.risk}] — ${s.hazard.recommendedControls.slice(0, 2).join("; ")}`
+    )
+    .join("\n");
+
+  const aiResult = await chatCompletion([
+    {
+      role: "system",
+      content: `You are a SIMOPS (Simultaneous Operations) safety coordinator for Nigerian oil & gas operations,
+trained on IOGP Report 470 (SIMOPS), DPR EGASPIN, and ISO 45001.
+
+Your job is to produce a clear, structured SIMOPS safety briefing that:
+1. Summarises the conflict situation
+2. States the key risks from running these operations simultaneously
+3. Gives concrete, prioritised mitigations for each conflict
+4. Issues an overall recommendation (HOLD, PROCEED WITH CONTROLS, or SAFE TO PROCEED)
+
+Return JSON with keys:
+- "situationSummary": string — brief narrative of what is conflicting and why it matters
+- "keyRisks": string[] — top 3-5 risks from simultaneous operations
+- "mitigations": Array<{ conflict: string, actions: string[] }> — per-conflict control measures
+- "recommendation": "HOLD" | "PROCEED WITH CONTROLS" | "SAFE TO PROCEED"
+- "recommendationRationale": string`,
+    },
+    {
+      role: "user",
+      content: `SIMOPS CHECK — New Permit Request
+Work Type: ${request.workType}
+Work Area: ${request.workArea ?? "Not specified"}
+Schedule: ${request.startDate} → ${request.endDate}
+
+${conflictSummaryText}
+
+${simopsFlagText}
+
+TOP HAZARDS IDENTIFIED (${allHazards.length} total, risk summary: ${JSON.stringify(riskSummary)}):
+${hazardText}
+
+Generate a SIMOPS safety briefing for the permit approver.`,
+    },
+  ]);
+
+  let briefing: {
+    situationSummary: string;
+    keyRisks: string[];
+    mitigations: Array<{ conflict: string; actions: string[] }>;
+    recommendation: string;
+    recommendationRationale: string;
+  };
+
+  try {
+    briefing = JSON.parse(aiResult.content);
+  } catch {
+    briefing = {
+      situationSummary: aiResult.content,
+      keyRisks: [],
+      mitigations: [],
+      recommendation: simopsResult.overallRisk === "critical" ? "HOLD" : "PROCEED WITH CONTROLS",
+      recommendationRationale: "AI response could not be parsed as JSON.",
+    };
+  }
+
+  console.log(
+    `[API] simops-assess complete — recommendation: ${briefing.recommendation}, overallRisk: ${simopsResult.overallRisk}`
+  );
+
+  return c.json({
+    success: true,
+    request,
+    recommendation: briefing.recommendation,
+    overallRisk: simopsResult.overallRisk,
+    steps: {
+      simopsCheck: {
+        conflicts: {
+          count: simopsResult.scheduleConflicts.count,
+          permits: simopsResult.scheduleConflicts.permits,
+        },
+        simopsFlags: simopsResult.simopsFlags,
+        summary: simopsResult.summary,
+      },
+      safetyBriefing: {
+        situationSummary: briefing.situationSummary,
+        keyRisks: briefing.keyRisks,
+        mitigations: briefing.mitigations,
+        recommendationRationale: briefing.recommendationRationale,
+        metadata: {
+          promptTokens: aiResult.promptTokens,
+          completionTokens: aiResult.completionTokens,
+        },
+      },
     },
   });
 });

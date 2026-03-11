@@ -6,6 +6,7 @@ import { RiskAssessTool } from "./tools/risk_assess.js";
 import { ComplianceCheckTool } from "./tools/compliance_check.js";
 import { PermitValidateTool } from "./tools/permit_validate.js";
 import { AnomalyDetectTool } from "./tools/anomaly_detect.js";
+import { SimopsCheckTool } from "./tools/simops_check.js";
 
 async function main() {
 	console.log("Initializing Permito MCP Server...");
@@ -35,6 +36,7 @@ Always provide clear, safety-focused responses. Never finalize high-risk permits
 	server.addTool(ComplianceCheckTool);
 	server.addTool(PermitValidateTool);
 	server.addTool(AnomalyDetectTool);
+	server.addTool(SimopsCheckTool);
 
 	// Permit assistant prompt for chat integration
 	server.addPrompt({
@@ -118,7 +120,7 @@ Prioritize H₂S exposure, confined space, hot work, SIMOPS, and dropped object 
 			console.log("You can now connect to it using an MCP client.");
 		}
 
-		console.log("Registered tools: HAZARD_SUGGEST, RISK_ASSESS, COMPLIANCE_CHECK, PERMIT_VALIDATE, ANOMALY_DETECT");
+		console.log("Registered tools: HAZARD_SUGGEST, RISK_ASSESS, COMPLIANCE_CHECK, PERMIT_VALIDATE, ANOMALY_DETECT, SIMOPS_CHECK");
 	} catch (error) {
 		console.error("Failed to start Permito MCP Server:", error);
 		process.exit(1);

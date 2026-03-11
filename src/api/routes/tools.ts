@@ -5,6 +5,7 @@ import { HazardService } from "../../services/hazardService.js";
 import { RiskScoringService } from "../../services/riskScoringService.js";
 import { ValidationService } from "../../services/validationService.js";
 import { chatCompletion } from "../../services/embeddingService.js";
+import { checkSimops } from "../../services/simopsService.js";
 
 const toolsRouter = new Hono();
 
@@ -184,6 +185,53 @@ toolsRouter.post("/anomaly-detect", async (c) => {
     issueCount: result.issues.length,
     issues: result.issues,
     confidence: result.confidence,
+  });
+});
+
+// POST /api/v1/tools/simops-check
+const PermitRequestSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  workType: z.string(),
+  workArea: z.string().nullable().optional(),
+});
+
+const ExistingPermitSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  type: z.string().optional(),
+  status: z.string(),
+  workType: z.string(),
+  workArea: z.string().nullable().optional(),
+  startDate: z.string(),
+  endDate: z.string(),
+  jobType: z.string().optional(),
+});
+
+const SimopsCheckBody = z.object({
+  request: PermitRequestSchema,
+  permits: z.array(ExistingPermitSchema),
+});
+
+toolsRouter.post("/simops-check", async (c) => {
+  const body = await c.req.json();
+  const { request, permits } = SimopsCheckBody.parse(body);
+
+  console.log(
+    `[API] SIMOPS_CHECK called for workType="${request.workType}" against ${permits.length} permit(s)`
+  );
+
+  const result = checkSimops(request, permits);
+
+  return c.json({
+    success: true,
+    request,
+    conflicts: {
+      count: result.scheduleConflicts.count,
+      permits: result.scheduleConflicts.permits,
+    },
+    simopsFlags: result.simopsFlags,
+    overallRisk: result.overallRisk,
+    summary: result.summary,
   });
 });
 
