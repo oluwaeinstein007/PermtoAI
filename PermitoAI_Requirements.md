@@ -42,8 +42,23 @@ Implementation of multi-layer validation, compliance checking, and workflow auto
    - Layer 4: Anomaly detection
 
 4. **Risk Matrix with Explainability**
-   - SHAP-based feature importance for transparency
+   - Rule-bounded severity floors for critical hazards
    - Audit-ready rationale for all risk assessments
+   - Aggregate matrix summary: totalMatrixSum, averageRiskScore, dominantRiskLevel
+   - Confidence scoring (0–1) and 95% confidence interval per assessment
+
+5. **SIMOPS (Simultaneous Operations) Conflict Detection** ✅ *Implemented*
+   - Schedule conflict detection: same work type + area + overlapping dates
+   - Incompatibility matrix: flags dangerous work type combinations (e.g. Hot Work + Confined Space Entry)
+   - SIMOPS assess workflow: conflict check → parallel hazard suggestion → risk scoring → AI safety briefing
+   - Recommendation: HOLD / PROCEED WITH CONTROLS / SAFE TO PROCEED
+
+6. **Compliance Document Ingestion Pipeline** ✅ *Implemented*
+   - Batched PDF ingestion from `compliance_docs/` directory
+   - Smart text chunking (paragraph-aware, sentence-boundary splits, 1400-char chunks with 180-char overlap)
+   - Deduplication via SHA-256 content hash as Qdrant point ID (re-runs are idempotent)
+   - Per-file clean mode and full collection reset options
+   - Stored in `permito_compliance_docs` Qdrant collection, searchable via `vectorService.searchComplianceDocs()`
 
 ---
 
@@ -199,9 +214,10 @@ Each hazard assessment must answer:
    - Cross-references user ID with training database
    - Verifies certification and authorization levels
    
-3. **Agent C (SIMOPS)**
-   - Checks for overlapping permit coordinates
-   - Identifies simultaneous operation conflicts
+3. **Agent C (SIMOPS)** ✅ *Implemented*
+   - Checks for overlapping permit schedules (same work type + area + overlapping dates)
+   - Identifies incompatible simultaneous work type combinations via a rule-based matrix
+   - Full workflow available at `POST /api/v1/agent/simops-assess`
 
 **Anomaly Detection:**
 - Compare current permit against baseline "Good" permits using cosine similarity
@@ -264,7 +280,7 @@ Approvers receive intelligent summaries:
 
 - [ ] H₂S detection accuracy in sour gas fields
 - [ ] Confined space hazards correctly identified
-- [ ] SIMOPS conflicts properly flagged
+- [x] SIMOPS conflicts properly flagged (schedule + incompatibility matrix)
 - [ ] DPR regulatory references accurate and current
 - [ ] Explanation quality reviewed by HSE expert
 - [ ] Response time < 3 seconds for all AI operations
@@ -317,8 +333,46 @@ interface RiskScore {
 }
 ```
 
+### RiskMatrixSummary
+```typescript
+interface RiskMatrixSummary {
+  counts: { critical: number; high: number; medium: number; low: number };
+  totalMatrixSum: number;          // Σ(likelihood × severity)
+  averageRiskScore: number;        // mean risk score
+  dominantRiskLevel: RiskLevel;    // highest level present
+  rulesApplied: number;            // hazards with severity raised by safety rule
+  overallAdvice: string;           // STOP WORK | HOLD | CAUTION | PROCEED
+  confidenceScore: number;         // 0.0–0.95
+  confidenceInterval: { lower: number; upper: number; level: "95%" };
+}
+```
+
+### PermitRequest (SIMOPS)
+```typescript
+interface PermitRequest {
+  startDate: string;        // ISO date or datetime
+  endDate: string;
+  workType: string;
+  workArea?: string | null; // nullable — omit to skip schedule conflict matching
+}
+```
+
+### ExistingPermit (SIMOPS)
+```typescript
+interface ExistingPermit {
+  id: number | string;
+  status: string;
+  workType: string;
+  workArea?: string | null;
+  startDate: string;
+  endDate: string;
+  type?: string;
+  jobType?: string;
+}
+```
+
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** February 2026  
+**Document Version:** 1.1
+**Last Updated:** March 2026
 **Status:** Active Development

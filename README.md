@@ -50,6 +50,7 @@ QDRANT_URL=http://localhost:6333
 QDRANT_KEY=your_qdrant_api_key           # Leave empty for local Qdrant
 QDRANT_COLLECTION=permito_regulations
 QDRANT_INCIDENTS_COLLECTION=permito_incidents
+QDRANT_COMPLIANCE_COLLECTION=permito_compliance_docs
 
 # Safety thresholds (optional — shown with defaults)
 HAZARD_CONFIDENCE_THRESHOLD=0.7
@@ -62,7 +63,15 @@ PORT=3000        # MCP HTTP server
 API_PORT=4000    # REST API server
 ```
 
-### 3. Seed the vector database
+### 3. Configure environment — add compliance collection
+
+Add to `.env`:
+
+```env
+QDRANT_COMPLIANCE_COLLECTION=permito_compliance_docs
+```
+
+### 4. Seed the vector database
 
 Populates Qdrant with DPR/IOGP regulations and historical incident data:
 
@@ -70,7 +79,22 @@ Populates Qdrant with DPR/IOGP regulations and historical incident data:
 pnpm seed
 ```
 
-### 4. Start the servers
+### 5. Ingest compliance documents (optional but recommended)
+
+Chunks and embeds PDFs from `compliance_docs/` into Qdrant for grounded compliance checks:
+
+```bash
+# Requires: pdftotext — sudo apt install poppler-utils
+pnpm ingest
+
+# Single file
+pnpm ingest -- --file IOGP_510.pdf
+
+# Rebuild from scratch
+pnpm ingest -- --clean
+```
+
+### 6. Start the servers
 
 ```bash
 # REST API server (port 4000)
@@ -107,18 +131,24 @@ PermitoAI/
 │   │
 │   ├── services/                   # Business logic
 │   │   ├── hazardService.ts        # AI hazard suggestion + RAG
-│   │   ├── riskScoringService.ts   # Risk matrix + rule constraints
+│   │   ├── riskScoringService.ts   # Risk matrix + rule constraints + computeSummary
+│   │   ├── simopsService.ts        # SIMOPS conflict detection + incompatibility matrix
 │   │   ├── validationService.ts    # Multi-layer permit validation
 │   │   ├── embeddingService.ts     # Google Gemini wrapper
-│   │   └── vectorService.ts        # Qdrant query wrapper
+│   │   └── vectorService.ts        # Qdrant query wrapper (regulations, incidents, compliance docs)
 │   │
 │   └── api/                        # REST API layer
 │       ├── server.ts               # Hono HTTP server (port 4000)
 │       ├── middleware/
 │       │   └── errorHandler.ts     # Global error handling
 │       └── routes/
-│           ├── tools.ts            # Tool endpoints
-│           └── agent.ts            # Agent workflow endpoints
+│           ├── tools.ts            # Tool endpoints (6 tools including SIMOPS_CHECK)
+│           └── agent.ts            # Agent workflow endpoints (full, quick, simops-assess)
+│
+├── compliance_docs/                # PDF source documents for ingestion
+│   ├── IOGP_510.pdf
+│   ├── SAFETY-REGULATIONS.pdf
+│   └── ...
 │
 ├── docs/
 │   ├── api.md                      # REST API reference
@@ -135,7 +165,7 @@ PermitoAI/
 
 ## Tools
 
-PermitoAI exposes five AI tools, available via both **REST API** and **MCP**:
+PermitoAI exposes six AI tools, available via both **REST API** and **MCP**:
 
 ### HAZARD_SUGGEST
 Identifies 5–10 workplace hazards for a job context using AI + vector retrieval of regulations and historical incidents.
@@ -144,10 +174,10 @@ Identifies 5–10 workplace hazards for a job context using AI + vector retrieva
 **Output:** Array of hazards with categories, likelihood/severity, controls, DPR references
 
 ### RISK_ASSESS
-Scores hazards using the risk matrix (likelihood × severity) with rule-based severity floor constraints.
+Scores hazards using the risk matrix (likelihood × severity) with rule-based severity floor constraints. Returns an aggregate `summary` with confidence scoring.
 
 **Input:** `Hazard[]`
-**Output:** Scored hazards with risk levels (critical/high/medium/low) and audit rationale
+**Output:** Scored hazards with risk levels, plus `summary` containing `totalMatrixSum`, `averageRiskScore`, `dominantRiskLevel`, `overallAdvice`, `confidenceScore` (0–1), and a `confidenceInterval` (95%)
 
 **Enforced severity minimums:**
 
@@ -189,6 +219,17 @@ Detects fraud patterns and copy-paste in hazard assessments (rule-based, determi
 **Input:** `Hazard[]`
 **Output:** Issue list with confidence score (0.9)
 
+### SIMOPS_CHECK
+Detects two types of conflict for a new permit request against a list of existing permits.
+
+1. **Schedule conflicts** — same work type, overlapping area, overlapping dates
+2. **Incompatibility flags** — dangerous work type pairs (e.g. Hot Work + Confined Space Entry → critical)
+
+**Input:** `{ request: PermitRequest, permits: ExistingPermit[] }`
+**Output:** `conflicts`, `simopsFlags`, `overallRisk`, `summary`
+
+`workArea` in the request is nullable — omit to check incompatibilities only.
+
 ---
 
 ## Agent Workflows
@@ -198,12 +239,17 @@ Higher-level workflows that chain multiple tools:
 ### `full-assessment`
 Complete pipeline: **HAZARD_SUGGEST → RISK_ASSESS → COMPLIANCE_CHECK + PERMIT_VALIDATE** (last two run in parallel).
 
-Takes a single `JobContext` and returns all step results plus an overall recommendation.
+Takes a single `JobContext` and returns all step results plus an overall recommendation. `riskAssess.summary` now includes confidence scoring.
 
 ### `quick-assess`
 Fast pipeline: **HAZARD_SUGGEST → RISK_ASSESS** only.
 
-Returns `requiresFullAssessment: true` if critical or high risks are detected.
+Returns `requiresFullAssessment: true` if critical or high risks are detected. `riskSummary` now includes full confidence fields.
+
+### `simops-assess`
+Full SIMOPS pipeline: **SIMOPS_CHECK → HAZARD_SUGGEST (parallel for each conflicting type) → RISK_ASSESS → AI safety briefing**.
+
+Returns `recommendation` (`HOLD` / `PROCEED WITH CONTROLS` / `SAFE TO PROCEED`), conflict details, and a structured safety briefing with per-conflict mitigations.
 
 ---
 
@@ -218,9 +264,11 @@ POST /api/v1/tools/risk-assess
 POST /api/v1/tools/compliance-check
 POST /api/v1/tools/permit-validate
 POST /api/v1/tools/anomaly-detect
+POST /api/v1/tools/simops-check
 GET  /api/v1/agent/tools
 POST /api/v1/agent/full-assessment
 POST /api/v1/agent/quick-assess
+POST /api/v1/agent/simops-assess
 ```
 
 Import `PermitoAI.postman_collection.json` into Postman to test all endpoints with pre-built example bodies.
@@ -276,4 +324,5 @@ pnpm start         # Start MCP server (stdio transport)
 pnpm start:http    # Start MCP server (HTTP, port 3000)
 pnpm api           # Start REST API server (port 4000)
 pnpm seed          # Seed Qdrant with regulations and incident data
+pnpm ingest        # Ingest compliance PDFs from compliance_docs/
 ```

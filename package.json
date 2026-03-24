@@ -8,6 +8,7 @@
     "start:http": "tsx src/index.ts --http",
     "api": "tsx src/api/server.ts",
     "seed": "tsx src/seed.ts",
+    "ingest": "tsx src/ingest.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

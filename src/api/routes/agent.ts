@@ -122,6 +122,7 @@ agentRouter.post("/full-assessment", async (c) => {
   // Step 2: Score hazards
   console.log("[API] Step 2/3 — Scoring hazards...");
   const scoredHazards = riskService.scoreHazards(hazards);
+  const matrixSummary = riskService.computeSummary(scoredHazards);
 
   // Step 3: Compliance check + permit validation in parallel
   console.log("[API] Step 3/3 — Running compliance check and permit validation...");
@@ -159,13 +160,6 @@ ${hazardSummary}`,
     complianceParsed.standards as Array<{ compliant: boolean }>
   ).every((s) => s.compliant);
 
-  const riskSummary = {
-    critical: scoredHazards.filter((s) => s.riskLevel === "critical").length,
-    high: scoredHazards.filter((s) => s.riskLevel === "high").length,
-    medium: scoredHazards.filter((s) => s.riskLevel === "medium").length,
-    low: scoredHazards.filter((s) => s.riskLevel === "low").length,
-  };
-
   const allValidationPassed = validationResults.every((r) => r.passed);
 
   console.log(`[API] Full assessment complete — recommendation: ${allValidationPassed && overallCompliant ? "Approve" : "Flag for Review"}`);
@@ -189,8 +183,16 @@ ${hazardSummary}`,
         },
       },
       riskAssess: {
-        summary: riskSummary,
-        rulesApplied: scoredHazards.filter((s) => s.ruleApplied).length,
+        summary: {
+          counts: matrixSummary.counts,
+          totalMatrixSum: matrixSummary.totalMatrixSum,
+          averageRiskScore: matrixSummary.averageRiskScore,
+          dominantRiskLevel: matrixSummary.dominantRiskLevel,
+          rulesApplied: matrixSummary.rulesApplied,
+          overallAdvice: matrixSummary.overallAdvice,
+          confidenceScore: matrixSummary.confidenceScore,
+          confidenceInterval: matrixSummary.confidenceInterval,
+        },
         scoredHazards: scoredHazards.map((s) => ({
           hazardName: s.hazard.name,
           category: s.hazard.category,
@@ -246,16 +248,10 @@ agentRouter.post("/quick-assess", async (c) => {
 
   // Step 2: Score hazards
   const scoredHazards = riskService.scoreHazards(hazards);
-
-  const riskSummary = {
-    critical: scoredHazards.filter((s) => s.riskLevel === "critical").length,
-    high: scoredHazards.filter((s) => s.riskLevel === "high").length,
-    medium: scoredHazards.filter((s) => s.riskLevel === "medium").length,
-    low: scoredHazards.filter((s) => s.riskLevel === "low").length,
-  };
+  const matrixSummary = riskService.computeSummary(scoredHazards);
 
   const requiresFullAssessment =
-    riskSummary.critical > 0 || riskSummary.high > 0;
+    matrixSummary.counts.critical > 0 || matrixSummary.counts.high > 0;
 
   return c.json({
     success: true,
@@ -265,7 +261,16 @@ agentRouter.post("/quick-assess", async (c) => {
       : "Proceed with Caution",
     requiresFullAssessment,
     hazardCount: hazards.length,
-    riskSummary,
+    riskSummary: {
+      counts: matrixSummary.counts,
+      totalMatrixSum: matrixSummary.totalMatrixSum,
+      averageRiskScore: matrixSummary.averageRiskScore,
+      dominantRiskLevel: matrixSummary.dominantRiskLevel,
+      rulesApplied: matrixSummary.rulesApplied,
+      overallAdvice: matrixSummary.overallAdvice,
+      confidenceScore: matrixSummary.confidenceScore,
+      confidenceInterval: matrixSummary.confidenceInterval,
+    },
     hazards,
     scoredHazards: scoredHazards.map((s) => ({
       hazardName: s.hazard.name,

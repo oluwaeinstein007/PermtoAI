@@ -12,6 +12,7 @@ export const env = {
   QDRANT_API_KEY: process.env.QDRANT_KEY || '',
   QDRANT_COLLECTION: process.env.QDRANT_COLLECTION || process.env.QDRANT_COLLECTION_NAME || 'permito_regulations',
   QDRANT_INCIDENTS_COLLECTION: process.env.QDRANT_INCIDENTS_COLLECTION || 'permito_incidents',
+  QDRANT_COMPLIANCE_COLLECTION: process.env.QDRANT_COMPLIANCE_COLLECTION || 'permito_compliance_docs',
 
   // Safety thresholds
   HAZARD_CONFIDENCE_THRESHOLD: parseFloat(process.env.HAZARD_CONFIDENCE_THRESHOLD || '0.7'),

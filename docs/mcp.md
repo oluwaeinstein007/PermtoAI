@@ -88,10 +88,11 @@ Once connected, Claude can invoke these tools by name:
 | Tool | When to use |
 |---|---|
 | `HAZARD_SUGGEST` | Identify hazards for a new permit scenario |
-| `RISK_ASSESS` | Score a list of hazards with risk matrix |
+| `RISK_ASSESS` | Score a list of hazards with risk matrix + confidence scoring |
 | `COMPLIANCE_CHECK` | Check DPR/ISO/IOGP compliance |
 | `PERMIT_VALIDATE` | Full 4-layer permit validation |
 | `ANOMALY_DETECT` | Check for copy-paste or suspicious patterns |
+| `SIMOPS_CHECK` | Check for schedule conflicts and incompatible simultaneous work types |
 
 ---
 
@@ -173,9 +174,65 @@ Output (JSON string):
 ```json
 {
   "success": true,
-  "summary": { "critical": 0, "high": 1, "medium": 0, "low": 0 },
-  "rulesApplied": 1,
+  "summary": {
+    "counts": { "critical": 0, "high": 1, "medium": 0, "low": 0 },
+    "totalMatrixSum": 12,
+    "averageRiskScore": 12.0,
+    "dominantRiskLevel": "high",
+    "rulesApplied": 1,
+    "overallAdvice": "HOLD — 1 high-severity risk(s) require senior HSE approval...",
+    "confidenceScore": 0.7,
+    "confidenceInterval": { "lower": 12.0, "upper": 12.0, "level": "95%" }
+  },
   "scoredHazards": [...]
+}
+```
+
+### SIMOPS_CHECK
+
+Input:
+
+```json
+{
+  "request": {
+    "startDate": "2026-03-18",
+    "endDate": "2026-03-27",
+    "workType": "Confined Space Entry",
+    "workArea": "Electrical Isolation"
+  },
+  "permits": [
+    {
+      "id": 111,
+      "status": "approved",
+      "workType": "Hot Work",
+      "workArea": "Electrical Isolation",
+      "startDate": "2026-03-20T08:00:00.000Z",
+      "endDate": "2026-03-25T17:00:00.000Z"
+    }
+  ]
+}
+```
+
+Output (JSON string):
+
+```json
+{
+  "success": true,
+  "conflicts": { "count": 0, "permits": [] },
+  "simopsFlags": {
+    "count": 1,
+    "flags": [
+      {
+        "permitId": 111,
+        "requestWorkType": "Confined Space Entry",
+        "conflictingWorkType": "Hot Work",
+        "severity": "critical",
+        "reason": "Hot Work must not be performed simultaneously with Confined Space Entry."
+      }
+    ]
+  },
+  "overallRisk": "critical",
+  "summary": "1 SIMOPS incompatibility detected. Overall risk: CRITICAL."
 }
 ```
 
@@ -258,6 +315,8 @@ Output (JSON string):
 
 ## Recommended Claude workflow
 
+### Standard permit assessment
+
 When Claude receives a permit-to-work request, the optimal tool call sequence is:
 
 ```
@@ -272,6 +331,22 @@ When Claude receives a permit-to-work request, the optimal tool call sequence is
 ```
 
 This is equivalent to `POST /api/v1/agent/full-assessment` in the REST API.
+
+### SIMOPS check before permit creation
+
+When Claude receives a new permit request that needs checking against active permits:
+
+```
+1. SIMOPS_CHECK(request, existingPermits)
+      ↓
+2. If conflicts found → HAZARD_SUGGEST for each conflicting work type (parallel)
+      ↓
+3. RISK_ASSESS(combined hazards from step 2)
+      ↓
+4. Generate SIMOPS safety briefing with recommendation
+```
+
+This is equivalent to `POST /api/v1/agent/simops-assess` in the REST API.
 
 ---
 

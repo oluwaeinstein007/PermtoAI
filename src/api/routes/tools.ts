@@ -43,18 +43,20 @@ toolsRouter.post("/risk-assess", async (c) => {
   console.log(`[API] RISK_ASSESS called for ${hazards.length} hazards`);
   const service = new RiskScoringService();
   const scoredHazards = service.scoreHazards(hazards);
-
-  const summary = {
-    critical: scoredHazards.filter((s) => s.riskLevel === "critical").length,
-    high: scoredHazards.filter((s) => s.riskLevel === "high").length,
-    medium: scoredHazards.filter((s) => s.riskLevel === "medium").length,
-    low: scoredHazards.filter((s) => s.riskLevel === "low").length,
-  };
+  const matrixSummary = service.computeSummary(scoredHazards);
 
   return c.json({
     success: true,
-    summary,
-    rulesApplied: scoredHazards.filter((s) => s.ruleApplied).length,
+    summary: {
+      counts: matrixSummary.counts,
+      totalMatrixSum: matrixSummary.totalMatrixSum,
+      averageRiskScore: matrixSummary.averageRiskScore,
+      dominantRiskLevel: matrixSummary.dominantRiskLevel,
+      rulesApplied: matrixSummary.rulesApplied,
+      overallAdvice: matrixSummary.overallAdvice,
+      confidenceScore: matrixSummary.confidenceScore,
+      confidenceInterval: matrixSummary.confidenceInterval,
+    },
     scoredHazards: scoredHazards.map((s) => ({
       hazardName: s.hazard.name,
       category: s.hazard.category,

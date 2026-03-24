@@ -1,6 +1,8 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { env } from "../config.js";
 
+
+
 export interface VectorSearchResult {
   id: string | number;
   score: number;
@@ -65,6 +67,38 @@ export class VectorService {
       }));
     } catch (error) {
       console.error("[VectorService] Incident search failed:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Search compliance documents (ingested PDFs) for relevant clauses/sections.
+   * Used to ground compliance checks in actual document content.
+   */
+  async searchComplianceDocs(
+    queryVector: number[],
+    limit: number = 5,
+    sourceFile?: string
+  ): Promise<VectorSearchResult[]> {
+    try {
+      const filter = sourceFile
+        ? { must: [{ key: "sourceFile", match: { value: sourceFile } }] }
+        : undefined;
+
+      const results = await this.client.search(env.QDRANT_COMPLIANCE_COLLECTION, {
+        vector: queryVector,
+        limit,
+        with_payload: true,
+        filter,
+      });
+
+      return results.map((r) => ({
+        id: r.id,
+        score: r.score,
+        payload: (r.payload ?? {}) as Record<string, unknown>,
+      }));
+    } catch (error) {
+      console.error("[VectorService] Compliance doc search failed:", error);
       return [];
     }
   }

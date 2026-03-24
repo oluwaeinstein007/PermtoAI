@@ -41,6 +41,8 @@ PermitoAI has two independent server processes that can run concurrently:
 
 Both servers share the same service layer — no logic is duplicated.
 
+> **New in current version:** `SimopsService` (schedule conflict detection + incompatibility matrix), compliance document ingestion pipeline (`src/ingest.ts`), and `RiskScoringService.computeSummary()` (aggregate matrix summary with confidence scoring).
+
 ---
 
 ## Request flow: hazard suggestion
@@ -140,19 +142,78 @@ RiskScoringService.scoreHazards(hazards[])
         │      < 5 → low
         │
         └─ rationale = explanation + rule adjustment note + DPR reference
+
+RiskScoringService.computeSummary(scoredHazards[])
+        │
+        ├─ counts           { critical, high, medium, low }
+        ├─ totalMatrixSum   Σ(likelihood × severity)
+        ├─ averageRiskScore totalMatrixSum / n
+        ├─ dominantRiskLevel  highest level present
+        ├─ rulesApplied     count of hazards with ruleApplied = true
+        │
+        ├─ overallAdvice    tiered string:
+        │     critical → "STOP WORK — ..."
+        │     high     → "HOLD — ..."
+        │     medium   → "CAUTION — ..."
+        │     low      → "PROCEED — ..."
+        │
+        ├─ confidenceScore (0.0–0.95)
+        │     base 0.55
+        │     + 0.10 if rulesApplied/n ≥ 0.3
+        │     + 0.10 if all hazards have DPR reference
+        │     + 0.10 if n ≥ 5  (+0.05 if n ≥ 8)
+        │     - 0.15 if n < 3  (too sparse)
+        │     - 0.05 if coefficient of variation > 0.6
+        │
+        └─ confidenceInterval { lower, upper, level: "95%" }
+              mean ± 1.96 × (σ / √n)
 ```
 
 This enforces the "rules constrain" principle — AI-generated severity values cannot fall below the regulatory minimums for critical hazard types.
 
 ---
 
+## SIMOPS engine
+
+```
+SimopsService.checkSimops(request, permits[])
+        │
+        ├─ Schedule conflict detection:
+        │     For each permit with same workType + overlapping workArea:
+        │       Check date overlap: max(start1,start2) < min(end1,end2)
+        │       → scheduleConflicts[]
+        │
+        ├─ Incompatibility matrix check:
+        │     For each permit, lookup (requestWorkType, permitWorkType)
+        │     in INCOMPATIBLE_PAIRS table (bidirectional)
+        │     → simopsFlags[] { permitId, severity, reason }
+        │
+        ├─ overallRisk = max severity across all conflicts + flags
+        │     none | medium | high | critical
+        │
+        └─ summary string for approver display
+```
+
+**Known incompatible pairs (bidirectional):**
+
+| Work type A | Work type B | Severity |
+|---|---|---|
+| Hot Work | Confined Space Entry | critical |
+| Hot Work | Gas Testing / Gas Work | critical |
+| Hot Work | H₂S / Toxic Gas Work | critical |
+| Radiography / NDT | any concurrent work | high |
+| Blasting / Explosives | any concurrent work | critical |
+| Excavation / Trenching | Underground Services | high |
+
+---
+
 ## Vector database structure
 
-Two Qdrant collections are populated by `pnpm seed`:
+Three Qdrant collections are used:
 
 ### `permito_regulations`
 
-Source: `workTypeRiskData.json` (40+ work type risk profiles)
+Populated by `pnpm seed`. Source: `workTypeRiskData.json` (40+ work type risk profiles).
 
 ```
 Payload schema:
@@ -161,24 +222,53 @@ Payload schema:
   riskCategory: string
   hazards: string[]
   controlMeasures: string[]
-  regulations: string[]
+  recommendation: string
+  inherentLikelihood: number
+  inherentImpact: number
+  energyLevel: string
+  residualRisk: string
 ```
 
 ### `permito_incidents`
 
-Source: 17 synthetic historical incidents (defined in `seed.ts`)
+Populated by `pnpm seed`. Source: 17 synthetic historical incidents (defined in `seed.ts`).
 
 ```
 Payload schema:
   description: string
-  hazards: string
+  workType: string
   hazard_names: string[]
-  lessons: string
+  outcome: "critical" | "high" | "medium"
+  lessons_learned: string
   location: string
-  severity: "critical" | "high"
 ```
 
-Vector dimensions: **3072** (Google `gemini-embedding-001`).
+### `permito_compliance_docs`
+
+Populated by `pnpm ingest`. Source: PDFs in `compliance_docs/`.
+
+```
+Payload schema:
+  content: string         — chunked text (1400 chars, 180-char overlap)
+  sourceFile: string      — original PDF filename
+  chunkIndex: number      — chunk sequence number within file
+  totalChunks: number     — total chunks for this file
+  pageHint: string        — estimated page location (e.g. "~p.3/45")
+  ingestedAt: string      — ISO timestamp
+```
+
+Deduplication: each chunk is identified by a SHA-256 hash of its content converted to a numeric ID. Re-running `pnpm ingest` upserts the same IDs — no duplicate points are created.
+
+**Ingestion pipeline options:**
+
+```bash
+pnpm ingest                           # ingest all PDFs in compliance_docs/
+pnpm ingest -- --file IOGP_510.pdf    # single file
+pnpm ingest -- --clean                # drop collection and re-ingest all
+pnpm ingest -- --clean-file           # delete old chunks per file, then re-ingest
+```
+
+Vector dimensions: **3072** (Google `gemini-embedding-001`) for all three collections.
 
 ---
 
@@ -213,7 +303,8 @@ If the vector database is down or returns an error during `embedText()`, `Hazard
 src/
 ├── index.ts                    MCP server bootstrap
 ├── config.ts                   env vars with defaults
-├── seed.ts                     Qdrant collection seeder
+├── seed.ts                     Qdrant collection seeder (regulations + incidents)
+├── ingest.ts                   Compliance PDF ingestion pipeline
 ├── run_tool.ts                 Manual tool test runner
 │
 ├── schemas/index.ts            Zod schemas (source of truth for all types)
@@ -222,25 +313,28 @@ src/
 │
 ├── tools/
 │   ├── hazard_suggest.ts       MCP tool → HazardService.suggestHazards()
-│   ├── risk_assess.ts          MCP tool → RiskScoringService.scoreHazards()
+│   ├── risk_assess.ts          MCP tool → RiskScoringService.scoreHazards() + computeSummary()
 │   ├── compliance_check.ts     MCP tool → chatCompletion() (inline)
 │   ├── permit_validate.ts      MCP tool → ValidationService.validatePermit()
 │   └── anomaly_detect.ts       MCP tool → ValidationService.anomalyDetection()
 │
 ├── services/
 │   ├── hazardService.ts        RAG pipeline (embed → vector search → Gemini → parse)
-│   ├── riskScoringService.ts   Risk matrix + rule-based severity floors
+│   ├── riskScoringService.ts   Risk matrix + severity floors + computeSummary (confidence)
+│   ├── simopsService.ts        SIMOPS conflict detection + incompatibility matrix
 │   ├── validationService.ts    4-layer validation (rule/semantic/compliance/anomaly)
 │   ├── embeddingService.ts     Google Gemini SDK wrapper (embedText, chatCompletion)
-│   └── vectorService.ts        Qdrant REST client wrapper (searchRegulations, searchIncidents)
+│   └── vectorService.ts        Qdrant wrapper (searchRegulations, searchIncidents, searchComplianceDocs)
 │
 └── api/
     ├── server.ts               Hono app + @hono/node-server bootstrap
     ├── middleware/
     │   └── errorHandler.ts     ZodError → 400, Error → 500
     └── routes/
-        ├── tools.ts            5 tool endpoints (call same services as MCP tools)
-        └── agent.ts            3 agent endpoints (orchestrated multi-step pipelines)
+        ├── tools.ts            6 tool endpoints (HAZARD_SUGGEST, RISK_ASSESS, COMPLIANCE_CHECK,
+        │                                         PERMIT_VALIDATE, ANOMALY_DETECT, SIMOPS_CHECK)
+        └── agent.ts            4 agent endpoints (full-assessment, quick-assess, simops-assess,
+                                                   GET tools)
 ```
 
 ---
@@ -253,9 +347,19 @@ MCP Tools / REST Routes
         ▼
    Services (business logic)
         │
+        ├──► hazardService      ──► embeddingService ──► Google Gemini API
+        │                       ──► vectorService    ──► Qdrant (regulations + incidents)
+        ├──► riskScoringService  (pure, no external deps)
+        ├──► simopsService       (pure, no external deps)
+        ├──► validationService  ──► embeddingService (layers 2 & 3)
         ├──► embeddingService   ──► Google Gemini API
         ├──► vectorService      ──► Qdrant REST API
         └──► schemas/index.ts   (Zod — shared type definitions)
+
+ingest.ts (script, not a service)
+        │
+        ├──► embeddingService   ──► Google Gemini API
+        └──► Qdrant REST API    (permito_compliance_docs collection)
 ```
 
 No circular dependencies. Services do not import from tools or routes.

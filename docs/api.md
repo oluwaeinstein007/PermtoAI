@@ -54,7 +54,7 @@ Returns server status.
   "service": "PermitoAI REST API",
   "version": "1.0.0",
   "timestamp": "2026-03-05T10:00:00.000Z",
-  "tools": ["HAZARD_SUGGEST", "RISK_ASSESS", "COMPLIANCE_CHECK", "PERMIT_VALIDATE", "ANOMALY_DETECT"]
+  "tools": ["HAZARD_SUGGEST", "RISK_ASSESS", "COMPLIANCE_CHECK", "PERMIT_VALIDATE", "ANOMALY_DETECT", "SIMOPS_CHECK"]
 }
 ```
 
@@ -181,12 +181,24 @@ Scores hazards using the risk matrix (`likelihood × severity`). Applies rule-ba
 {
   "success": true,
   "summary": {
-    "critical": 1,
-    "high": 1,
-    "medium": 2,
-    "low": 0
+    "counts": {
+      "critical": 1,
+      "high": 1,
+      "medium": 2,
+      "low": 0
+    },
+    "totalMatrixSum": 52,
+    "averageRiskScore": 13.0,
+    "dominantRiskLevel": "critical",
+    "rulesApplied": 1,
+    "overallAdvice": "STOP WORK — 1 critical risk(s) identified. Immediate escalation required. Do not proceed until critical hazards are eliminated or risk reduced below critical threshold.",
+    "confidenceScore": 0.75,
+    "confidenceInterval": {
+      "lower": 7.8,
+      "upper": 18.2,
+      "level": "95%"
+    }
   },
-  "rulesApplied": 1,
   "scoredHazards": [
     {
       "hazardName": "H2S Exposure",
@@ -202,6 +214,19 @@ Scores hazards using the risk matrix (`likelihood × severity`). Applies rule-ba
   ]
 }
 ```
+
+**Summary fields:**
+
+| Field | Description |
+|---|---|
+| `summary.counts` | Hazard count per risk level |
+| `summary.totalMatrixSum` | Sum of all `likelihood × severity` scores |
+| `summary.averageRiskScore` | Mean risk score across all hazards |
+| `summary.dominantRiskLevel` | Highest risk level present |
+| `summary.rulesApplied` | Number of hazards whose severity was raised by a safety rule |
+| `summary.overallAdvice` | Tiered advice: `STOP WORK` / `HOLD` / `CAUTION` / `PROCEED` |
+| `summary.confidenceScore` | 0.0–1.0. Boosted by rule coverage, DPR references, and hazard breadth |
+| `summary.confidenceInterval` | 95% CI around `averageRiskScore` using `mean ± 1.96 × (σ/√n)` |
 
 **Risk level thresholds:**
 
@@ -460,8 +485,16 @@ Complete four-step permit pipeline in a single request.
       }
     },
     "riskAssess": {
-      "summary": { "critical": 2, "high": 3, "medium": 2, "low": 1 },
-      "rulesApplied": 3,
+      "summary": {
+        "counts": { "critical": 2, "high": 3, "medium": 2, "low": 1 },
+        "totalMatrixSum": 98,
+        "averageRiskScore": 12.25,
+        "dominantRiskLevel": "critical",
+        "rulesApplied": 3,
+        "overallAdvice": "STOP WORK — 2 critical risk(s) identified. Immediate escalation required.",
+        "confidenceScore": 0.85,
+        "confidenceInterval": { "lower": 8.4, "upper": 16.1, "level": "95%" }
+      },
       "scoredHazards": [ ... ]
     },
     "complianceCheck": {
@@ -502,10 +535,14 @@ Two-step pipeline for rapid initial screening.
   "requiresFullAssessment": true,
   "hazardCount": 6,
   "riskSummary": {
-    "critical": 1,
-    "high": 2,
-    "medium": 2,
-    "low": 1
+    "counts": { "critical": 1, "high": 2, "medium": 2, "low": 1 },
+    "totalMatrixSum": 62,
+    "averageRiskScore": 10.33,
+    "dominantRiskLevel": "critical",
+    "rulesApplied": 2,
+    "overallAdvice": "STOP WORK — 1 critical risk(s) identified. Immediate escalation required.",
+    "confidenceScore": 0.8,
+    "confidenceInterval": { "lower": 6.1, "upper": 14.6, "level": "95%" }
   },
   "hazards": [ ... ],
   "scoredHazards": [ ... ],
@@ -522,6 +559,187 @@ Two-step pipeline for rapid initial screening.
 | `"Proceed with Caution"` | All risks are `medium` or `low` |
 
 > Typical latency: 8–12 seconds.
+
+---
+
+### `POST /api/v1/agent/simops-assess`
+
+Full SIMOPS workflow in a single request.
+
+**Execution order:**
+1. `SIMOPS_CHECK` — detect schedule conflicts and incompatible work type pairs
+2. `HAZARD_SUGGEST` — suggest hazards for the requested work type and each conflicting type (in parallel)
+3. `RISK_ASSESS` — score all combined hazards
+4. AI safety briefing — Gemini generates a structured SIMOPS briefing with recommendation
+
+**Request body**
+
+```json
+{
+  "request": {
+    "startDate": "2024-06-01",
+    "endDate": "2027-06-07",
+    "workType": "Confined Space Entry",
+    "workArea": "Electrical Isolation"
+  },
+  "permits": [
+    {
+      "id": 110,
+      "type": "Draft",
+      "status": "draft",
+      "workType": "Confined Space Entry",
+      "workArea": "Electrical Isolation",
+      "startDate": "2026-03-18T07:00:00.000Z",
+      "endDate": "2026-03-27T16:00:00.000Z",
+      "jobType": "Confined Space Entry"
+    }
+  ],
+  "jobContext": {
+    "location": "Bonny Terminal",
+    "environment": "Offshore platform"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `request.startDate` | string (ISO date) | Yes | Requested permit start date |
+| `request.endDate` | string (ISO date) | Yes | Requested permit end date |
+| `request.workType` | string | Yes | Work type of the new permit |
+| `request.workArea` | string \| null | No | Work area — if null, skips schedule conflict check |
+| `permits` | ExistingPermit[] | Yes | Active/draft permits to check against |
+| `jobContext` | Partial\<JobContext\> | No | Optional extra context to enrich hazard suggestion |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "request": { ... },
+  "recommendation": "HOLD",
+  "overallRisk": "critical",
+  "steps": {
+    "simopsCheck": {
+      "conflicts": {
+        "count": 1,
+        "permits": [
+          {
+            "permitId": 110,
+            "status": "draft",
+            "workType": "Confined Space Entry",
+            "workArea": "Electrical Isolation",
+            "overlapStart": "2026-03-18T07:00:00.000Z",
+            "overlapEnd": "2026-03-27T16:00:00.000Z"
+          }
+        ]
+      },
+      "simopsFlags": {
+        "count": 1,
+        "flags": [
+          {
+            "permitId": 111,
+            "requestWorkType": "Confined Space Entry",
+            "conflictingWorkType": "Hot Work",
+            "severity": "critical",
+            "reason": "Hot Work must not be performed simultaneously with Confined Space Entry."
+          }
+        ]
+      },
+      "summary": "1 schedule conflict and 1 SIMOPS incompatibility detected. Overall risk: CRITICAL."
+    },
+    "safetyBriefing": {
+      "situationSummary": "...",
+      "keyRisks": [ "...", "..." ],
+      "mitigations": [
+        {
+          "conflict": "Hot Work vs Confined Space Entry — Permit #111",
+          "actions": [ "Suspend Permit #111 for full duration of confined space entry", "..." ]
+        }
+      ],
+      "recommendationRationale": "IOGP Report 470 mandates...",
+      "metadata": { "promptTokens": 1180, "completionTokens": 720 }
+    }
+  }
+}
+```
+
+| `recommendation` value | Condition |
+|---|---|
+| `"HOLD"` | Critical SIMOPS flag or schedule conflict present |
+| `"PROCEED WITH CONTROLS"` | High-severity flags or medium risk |
+| `"SAFE TO PROCEED"` | No conflicts or flags detected |
+
+> Typical latency: 15–25 seconds.
+
+---
+
+### `POST /api/v1/tools/simops-check`
+
+Stand-alone SIMOPS conflict check (no hazard suggestion or AI briefing).
+
+**Request body**
+
+```json
+{
+  "request": {
+    "startDate": "2024-06-01",
+    "endDate": "2027-06-07",
+    "workType": "Confined Space Entry",
+    "workArea": "Electrical Isolation"
+  },
+  "permits": [
+    {
+      "id": 110,
+      "status": "draft",
+      "workType": "Confined Space Entry",
+      "workArea": "Electrical Isolation",
+      "startDate": "2026-03-18T07:00:00.000Z",
+      "endDate": "2026-03-27T16:00:00.000Z"
+    }
+  ]
+}
+```
+
+`workArea` in `request` is nullable — omit it to skip schedule conflict matching and only detect incompatible work type pairs.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "request": { ... },
+  "conflicts": {
+    "count": 1,
+    "permits": [ { "permitId": 110, "status": "draft", "workType": "...", "overlapStart": "...", "overlapEnd": "..." } ]
+  },
+  "simopsFlags": {
+    "count": 0,
+    "flags": []
+  },
+  "overallRisk": "high",
+  "summary": "1 schedule conflict detected. Overall risk: HIGH."
+}
+```
+
+**`overallRisk` values:**
+
+| Value | Condition |
+|---|---|
+| `"none"` | No conflicts or flags |
+| `"medium"` | Low-severity incompatibility flag |
+| `"high"` | High-severity flag or schedule conflict |
+| `"critical"` | Any critical incompatibility flag |
+
+**Known incompatible work type pairs:**
+
+| Pair | Severity | Reason |
+|---|---|---|
+| Hot Work + Confined Space Entry | critical | Ignition sources near confined spaces |
+| Hot Work + Gas Testing / Gas Work | critical | Ignition sources near gas atmosphere |
+| Hot Work + H₂S / Toxic Gas Work | critical | Toxic gas + ignition = catastrophic |
+| Radiography / NDT + any work | high | Radiation exclusion zone conflicts |
+| Blasting / Explosives + any work | critical | Shock/blast radius conflict |
+| Excavation + Underground Services | high | Service strike risk |
 
 ---
 
