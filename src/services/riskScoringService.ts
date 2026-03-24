@@ -102,9 +102,7 @@ export class RiskScoringService {
         severity: severity as 1 | 2 | 3 | 4 | 5,
         risk,
         rationale,
-        historicalEvidence: hazard.dprReference
-          ? [hazard.dprReference]
-          : undefined,
+        historicalEvidence: hazard.regulatoryRefs?.length ? hazard.regulatoryRefs : undefined,
       },
       riskLevel,
       ruleApplied,
@@ -159,8 +157,8 @@ export class RiskScoringService {
     // +0.10 if ≥30 % of hazards were constrained by a safety rule
     if (rulesApplied / n >= 0.3) confidence += 0.10;
 
-    // +0.10 if all hazards have a DPR reference
-    const withRef = scored.filter((s) => !!s.hazard.dprReference).length;
+    // +0.10 if all hazards have at least one regulatory reference
+    const withRef = scored.filter((s) => !!s.hazard.regulatoryRefs?.length).length;
     if (withRef === n) confidence += 0.10;
     else if (withRef / n >= 0.5) confidence += 0.05;
 
@@ -236,8 +234,8 @@ export class RiskScoringService {
       );
     }
 
-    if (hazard.dprReference) {
-      parts.push(`Reference: ${hazard.dprReference}.`);
+    if (hazard.regulatoryRefs?.length) {
+      parts.push(`References: ${hazard.regulatoryRefs.join("; ")}.`);
     }
 
     return parts.join(" ");

@@ -19,7 +19,7 @@ export const HazardSchema = z.object({
   likelihood: RatingSchema.describe("1=rare, 5=almost certain"),
   severity: RatingSchema.describe("1=negligible, 5=catastrophic"),
   recommendedControls: z.array(z.string()).describe("Specific control measures"),
-  dprReference: z.string().optional().describe("Nigerian DPR regulation reference"),
+  regulatoryRefs: z.array(z.string()).optional().describe("Applicable regulatory references — DPR EGASPIN, ISO 45001, IOGP, etc."),
   explanation: z.string().describe("Rationale for why this hazard is relevant"),
 });
 export type Hazard = z.infer<typeof HazardSchema>;

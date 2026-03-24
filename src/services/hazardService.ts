@@ -43,7 +43,11 @@ Generate 5-${env.MAX_HAZARD_SUGGESTIONS} potential hazards for this job. For eac
 3. likelihood: Rating 1-5 (1=rare, 5=almost certain)
 4. severity: Rating 1-5 (1=negligible, 5=catastrophic)
 5. recommendedControls: Array of specific control measures
-6. dprReference: Nigerian DPR regulation reference (e.g. "DPR EGASPIN Section 4.1.2"). OMIT this field entirely if no specific regulation applies — do NOT use "N/A", "none", "null", or any placeholder string.
+6. regulatoryRefs: Array of applicable regulatory references. Include any that apply:
+   - DPR EGASPIN (e.g. "DPR EGASPIN Section 4.1.2")
+   - ISO 45001 (e.g. "ISO 45001:2018 Clause 8.1.3")
+   - IOGP (e.g. "IOGP Report 459 Section 3.2")
+   OMIT this field entirely if no specific regulation applies — do NOT use ["N/A"], ["none"], or any placeholder strings.
 7. explanation: Brief rationale for why this hazard is relevant
 
 CRITICAL FOCUS AREAS:
@@ -78,14 +82,16 @@ function formatIncidents(results: VectorSearchResult[]): string {
 
 const DPR_PLACEHOLDER = /^(n\/?a|none|null|not applicable|no reference|no ref)$/i;
 
-/** Strip placeholder dprReference values that the AI sometimes returns instead of omitting the field. */
+/** Strip placeholder values from regulatoryRefs; remove the field entirely if nothing real remains. */
 function normalizeHazards(hazards: Hazard[]): Hazard[] {
   return hazards.map((h) => {
-    if (h.dprReference && DPR_PLACEHOLDER.test(h.dprReference.trim())) {
-      const { dprReference: _, ...rest } = h;
+    if (!h.regulatoryRefs?.length) return h;
+    const filtered = h.regulatoryRefs.filter((r) => !DPR_PLACEHOLDER.test(r.trim()));
+    if (filtered.length === 0) {
+      const { regulatoryRefs: _, ...rest } = h;
       return rest as Hazard;
     }
-    return h;
+    return { ...h, regulatoryRefs: filtered };
   });
 }
 

@@ -73,13 +73,13 @@ export class ValidationService {
       }
     }
 
-    // Critical severity hazards must have a real DPR reference (not a placeholder)
-    const DPR_PLACEHOLDER = /^(n\/?a|none|null|not applicable|no reference|no ref)$/i;
+    // Critical severity hazards must have at least one real regulatory reference
+    const PLACEHOLDER = /^(n\/?a|none|null|not applicable|no reference|no ref)$/i;
     for (const hazard of hazards) {
-      const hasDprRef = hazard.dprReference && !DPR_PLACEHOLDER.test(hazard.dprReference.trim());
-      if (hazard.severity >= 4 && !hasDprRef) {
+      const hasRef = hazard.regulatoryRefs?.some((r) => !PLACEHOLDER.test(r.trim()));
+      if (hazard.severity >= 4 && !hasRef) {
         issues.push(
-          `High-severity hazard "${hazard.name}" (severity=${hazard.severity}) is missing DPR regulatory reference.`
+          `High-severity hazard "${hazard.name}" (severity=${hazard.severity}) is missing a regulatory reference (DPR EGASPIN, ISO 45001, or IOGP).`
         );
       }
     }
@@ -175,7 +175,7 @@ Note: Only flag issues that are clearly present. Do not penalise missing optiona
           content: `Check compliance for this permit:
 
 JOB: ${context.jobType}${context.location ? ` at ${context.location}` : ""}${context.environment ? `\nENVIRONMENT: ${context.environment}` : ""}
-HAZARDS: ${hazards.map((h) => `${h.name} [${h.dprReference ?? "no ref"}]`).join(", ")}
+HAZARDS: ${hazards.map((h) => `${h.name} [${h.regulatoryRefs?.join("; ") ?? "no ref"}]`).join(", ")}
 
 Verify:
 1. All required DPR EGASPIN sections are referenced for the identified hazards

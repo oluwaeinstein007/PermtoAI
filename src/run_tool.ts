@@ -35,7 +35,7 @@ const sampleHazards: Hazard[] = [
       "Escape breathing apparatus",
       "Wind direction monitoring",
     ],
-    dprReference: "DPR EGASPIN Section 5.2.3",
+    regulatoryRefs: ["DPR EGASPIN Section 5.2.3", "ISO 45001:2018 Clause 8.1.3"],
     explanation: "Sour gas field environment presents high H₂S risk requiring constant monitoring",
   },
   {
@@ -48,7 +48,7 @@ const sampleHazards: Hazard[] = [
       "Scaffolding with guardrails",
       "Rescue plan in place",
     ],
-    dprReference: "DPR EGASPIN Section 4.1.7",
+    regulatoryRefs: ["DPR EGASPIN Section 4.1.7", "IOGP Report 459 Section 3.2"],
     explanation: "10-meter elevated work area requires fall protection measures",
   },
   {
@@ -61,7 +61,7 @@ const sampleHazards: Hazard[] = [
       "Fire watch during and 30 min after work",
       "Fire blankets and extinguishers on site",
     ],
-    dprReference: "DPR EGASPIN Section 3.4.2",
+    regulatoryRefs: ["DPR EGASPIN Section 3.4.2", "ISO 45001:2018 Clause 8.1.4"],
     explanation: "Welding near hydrocarbon processing unit creates fire/explosion risk",
   },
   {
@@ -214,7 +214,7 @@ async function testHazardSuggest() {
     console.log(
       `\n  • ${h.name} [${h.category}] L:${h.likelihood}/S:${h.severity}` +
       `\n    Controls: ${h.recommendedControls.join("; ")}` +
-      (h.dprReference ? `\n    Ref: ${h.dprReference}` : "")
+      (h.regulatoryRefs?.length ? `\n    Refs: ${h.regulatoryRefs.join("; ")}` : "")
     );
   }
 }
@@ -229,7 +229,7 @@ async function testComplianceCheck() {
   const hazardSummary = sampleHazards
     .map(
       (h) =>
-        `${h.name} (${h.category}, L:${h.likelihood}/S:${h.severity}) — Controls: ${h.recommendedControls.join("; ")}${h.dprReference ? ` — Ref: ${h.dprReference}` : ""}`
+        `${h.name} (${h.category}, L:${h.likelihood}/S:${h.severity}) — Controls: ${h.recommendedControls.join("; ")}${h.regulatoryRefs?.length ? ` — Refs: ${h.regulatoryRefs.join("; ")}` : ""}`
     )
     .join("\n");
 
