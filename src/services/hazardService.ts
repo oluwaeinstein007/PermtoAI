@@ -43,7 +43,7 @@ Generate 5-${env.MAX_HAZARD_SUGGESTIONS} potential hazards for this job. For eac
 3. likelihood: Rating 1-5 (1=rare, 5=almost certain)
 4. severity: Rating 1-5 (1=negligible, 5=catastrophic)
 5. recommendedControls: Array of specific control measures
-6. dprReference: Nigerian DPR regulation reference (if applicable)
+6. dprReference: Nigerian DPR regulation reference (e.g. "DPR EGASPIN Section 4.1.2"). OMIT this field entirely if no specific regulation applies — do NOT use "N/A", "none", "null", or any placeholder string.
 7. explanation: Brief rationale for why this hazard is relevant
 
 CRITICAL FOCUS AREAS:
@@ -74,6 +74,19 @@ function formatIncidents(results: VectorSearchResult[]): string {
         `[${i + 1}] ${(r.payload["description"] as string) ?? "Incident"} — Hazards: ${(r.payload["hazards"] as string) ?? "N/A"} (similarity: ${r.score.toFixed(2)})`
     )
     .join("\n");
+}
+
+const DPR_PLACEHOLDER = /^(n\/?a|none|null|not applicable|no reference|no ref)$/i;
+
+/** Strip placeholder dprReference values that the AI sometimes returns instead of omitting the field. */
+function normalizeHazards(hazards: Hazard[]): Hazard[] {
+  return hazards.map((h) => {
+    if (h.dprReference && DPR_PLACEHOLDER.test(h.dprReference.trim())) {
+      const { dprReference: _, ...rest } = h;
+      return rest as Hazard;
+    }
+    return h;
+  });
 }
 
 export interface HazardSuggestionResult {
@@ -121,7 +134,7 @@ export class HazardService {
 
     const parsed = JSON.parse(result.content);
     const hazardsArray = z.array(HazardSchema);
-    const hazards = hazardsArray.parse(parsed.hazards);
+    const hazards = normalizeHazards(hazardsArray.parse(parsed.hazards));
 
     // Merge any missed hazards from incident similarity search
     const mergedHazards = this.mergeIncidentHazards(hazards, incidents);
@@ -150,7 +163,7 @@ export class HazardService {
 
     const parsed = JSON.parse(result.content);
     const hazardsArray = z.array(HazardSchema);
-    const hazards = hazardsArray.parse(parsed.hazards);
+    const hazards = normalizeHazards(hazardsArray.parse(parsed.hazards));
 
     return {
       hazards,

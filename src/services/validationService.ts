@@ -73,9 +73,11 @@ export class ValidationService {
       }
     }
 
-    // Critical severity hazards must have DPR reference
+    // Critical severity hazards must have a real DPR reference (not a placeholder)
+    const DPR_PLACEHOLDER = /^(n\/?a|none|null|not applicable|no reference|no ref)$/i;
     for (const hazard of hazards) {
-      if (hazard.severity >= 4 && !hazard.dprReference) {
+      const hasDprRef = hazard.dprReference && !DPR_PLACEHOLDER.test(hazard.dprReference.trim());
+      if (hazard.severity >= 4 && !hasDprRef) {
         issues.push(
           `High-severity hazard "${hazard.name}" (severity=${hazard.severity}) is missing DPR regulatory reference.`
         );
@@ -120,7 +122,7 @@ export class ValidationService {
           role: "user",
           content: `Validate this hazard assessment:
 
-JOB: ${context.jobType} at ${context.location} (${context.environment})
+JOB: ${context.jobType}${context.location ? ` at ${context.location}` : ""}${context.environment ? ` (${context.environment})` : ""}
 EQUIPMENT: ${(context.equipment ?? []).join(", ") || "Not specified"}
 
 IDENTIFIED HAZARDS:
@@ -130,7 +132,9 @@ Check for:
 1. Missing obvious hazards for this job type
 2. Controls that don't match the hazard
 3. Inconsistent likelihood/severity ratings
-4. Any logically impossible combinations`,
+4. Any logically impossible combinations
+
+Note: Only flag issues that are clearly present. Do not penalise missing optional context fields (location, environment) as validation issues.`,
         },
       ]);
 
@@ -170,15 +174,16 @@ Check for:
           role: "user",
           content: `Check compliance for this permit:
 
-JOB: ${context.jobType} at ${context.location}
-ENVIRONMENT: ${context.environment}
+JOB: ${context.jobType}${context.location ? ` at ${context.location}` : ""}${context.environment ? `\nENVIRONMENT: ${context.environment}` : ""}
 HAZARDS: ${hazards.map((h) => `${h.name} [${h.dprReference ?? "no ref"}]`).join(", ")}
 
 Verify:
-1. All required DPR EGASPIN sections are referenced
+1. All required DPR EGASPIN sections are referenced for the identified hazards
 2. ISO 45001 risk assessment requirements are met
 3. IOGP recommended practices are followed
-4. Any missing mandatory documentation or certifications`,
+4. Any missing mandatory documentation or certifications
+
+Note: Only raise issues based on the hazard data provided. Do not flag absence of optional context fields (location, environment) as compliance failures.`,
         },
       ]);
 

@@ -24,7 +24,9 @@ services:
       # Qdrant (override host to use internal Docker network)
       QDRANT_URL: "http://qdrant:6333"
       QDRANT_KEY: ${QDRANT_KEY}
-      QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-permito_regulations}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-permito_regulations}
+      QDRANT_INCIDENTS_COLLECTION: ${QDRANT_INCIDENTS_COLLECTION:-permito_incidents}
+      QDRANT_COMPLIANCE_COLLECTION: ${QDRANT_COMPLIANCE_COLLECTION:-permito_compliance_docs}
       # MCP transport
       USE_HTTP: "true"
       PORT: "3000"
@@ -54,7 +56,9 @@ services:
       # Qdrant (override host to use internal Docker network)
       QDRANT_URL: ${QDRANT_HOST:-http://qdrant:6333}
       QDRANT_KEY: ${QDRANT_KEY}
-      QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-permito_regulations}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-permito_regulations}
+      QDRANT_INCIDENTS_COLLECTION: ${QDRANT_INCIDENTS_COLLECTION:-permito_incidents}
+      QDRANT_COMPLIANCE_COLLECTION: ${QDRANT_COMPLIANCE_COLLECTION:-permito_compliance_docs}
       # REST API
       API_PORT: "4000"
     depends_on:
@@ -66,6 +70,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # One-shot service: run `docker compose run --rm ingest` to ingest compliance PDFs
+  ingest:
+    build: .
+    container_name: permito-ingest
+    command: pnpm ingest
+    volumes:
+      - ./compliance_docs:/app/compliance_docs:ro
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GOOGLE_EMBEDDING_MODEL: ${GOOGLE_EMBEDDING_MODEL:-gemini-embedding-001}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-3072}
+      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_KEY: ${QDRANT_KEY}
+      QDRANT_COMPLIANCE_COLLECTION: ${QDRANT_COMPLIANCE_COLLECTION:-permito_compliance_docs}
+    depends_on:
+      - qdrant
+    profiles:
+      - tools
 
 volumes:
   qdrant_data:
