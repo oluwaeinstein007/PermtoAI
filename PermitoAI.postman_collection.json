@@ -354,6 +354,267 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Routing (Feature 1 — Intelligent Permit Routing)",
+      "description": "AI-powered permit routing recommendations and pre-submission validation.\n\n- **recommend**: Given permit data + available users, returns the optimal approver list, routing path, missing controls, risk rating, and SIMOPS conflicts.\n- **pre-submission-check**: Two-layer validation (rule-based + AI semantic) that flags completeness issues before a permit is submitted.",
+      "item": [
+        {
+          "name": "Recommend Routing",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/routing/recommend",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "routing", "recommend"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permit\": {\n    \"id\": 42,\n    \"type\": \"Hot Work Permit\",\n    \"workType\": \"Hot Work - Welding/Cutting\",\n    \"workArea\": \"Process Areas – Module 3\",\n    \"severity\": \"High\",\n    \"likelihood\": \"Likely\",\n    \"hazards\": [\"Hydrocarbon vapour ignition\", \"H2S exposure\", \"Fire\"],\n    \"controlMeasures\": [\"Fire extinguisher on standby\"],\n    \"isolationSections\": [\n      { \"isolatorId\": 12, \"verifierId\": 15, \"equipmentId\": 101 }\n    ],\n    \"startDate\": \"2026-04-10\",\n    \"endDate\": \"2026-04-12\",\n    \"workShift\": \"Day\",\n    \"attachments\": []\n  },\n  \"availableUsers\": [\n    { \"userId\": 5, \"name\": \"Jane Doe\", \"role\": \"HSE Manager\", \"currentQueue\": 2 },\n    { \"userId\": 8, \"name\": \"Mark Bello\", \"role\": \"Gas Tester\", \"currentQueue\": 0 },\n    { \"userId\": 11, \"name\": \"Chidi Okafor\", \"role\": \"Isolation Manager\", \"currentQueue\": 1 }\n  ],\n  \"activePermits\": [\n    {\n      \"id\": 38,\n      \"workType\": \"Confined Space Entry\",\n      \"workArea\": \"Process Areas\",\n      \"startDate\": \"2026-04-09\",\n      \"endDate\": \"2026-04-11\",\n      \"status\": \"active\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Returns the recommended approval routing path for a permit.\n\n**Workflow:**\n1. Computes risk rating (severity × likelihood matrix)\n2. Determines required roles based on work type, isolation sections, and hazard keywords\n3. Selects and load-balances available approvers by queue depth\n4. AI identifies missing control measures and generates routing notes\n5. Detects SIMOPS conflicts with active permits (date + area overlap)\n\n**Returns:** recommendedApprovers, routingPath, missingControls, riskRating, simopsConflicts, confidence"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"recommendedApprovers\": [\n      { \"userId\": 5, \"name\": \"Jane Doe\", \"role\": \"HSE Manager\", \"currentQueue\": 2 },\n      { \"userId\": 8, \"name\": \"Mark Bello\", \"role\": \"Gas Tester\", \"currentQueue\": 0 },\n      { \"userId\": 11, \"name\": \"Chidi Okafor\", \"role\": \"Isolation Manager\", \"currentQueue\": 1 }\n    ],\n    \"routingPath\": [\"HSE Manager\", \"Gas Tester\", \"Isolation Manager\"],\n    \"missingControls\": [\n      \"Continuous gas monitoring with audible alarm\",\n      \"Fire watch posted throughout operation\",\n      \"Hot work permit area isolation\"\n    ],\n    \"routingNotes\": \"SIMOPS conflict with active CSE permit in same area — coordinate gas testing schedules.\",\n    \"riskRating\": \"HIGH\",\n    \"simopsConflicts\": [\n      { \"permitId\": 38, \"workType\": \"Confined Space Entry\", \"workArea\": \"Process Areas\" }\n    ],\n    \"confidence\": 0.88\n  },\n  \"metadata\": { \"promptTokens\": 920, \"completionTokens\": 410 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Pre-Submission Check",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/routing/pre-submission-check",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "routing", "pre-submission-check"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permit\": {\n    \"type\": \"Hot Work Permit\",\n    \"workType\": \"Hot Work - Welding/Cutting\",\n    \"workArea\": \"Process Areas – Module 3\",\n    \"severity\": \"High\",\n    \"likelihood\": \"Likely\",\n    \"hazards\": [\"Fire\", \"Burns\"],\n    \"controlMeasures\": [\"Fire extinguisher on standby\"],\n    \"isolationSections\": [],\n    \"startDate\": \"2026-04-10\",\n    \"endDate\": \"2026-04-12\",\n    \"workShift\": \"Day\",\n    \"attachments\": []\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Validates permit completeness before submission.\n\n**Layer 1 — Rule-based:** Checks required fields, isolation plan for applicable work types, attachment requirements for high-risk types, gas test control for Hot Work.\n\n**Layer 2 — AI semantic:** Contextual review for gaps not caught by rules.\n\n**Returns:** ready (boolean), issues array with field + message, suggestions array."
+          },
+          "response": [
+            {
+              "name": "200 OK — Not Ready",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"ready\": false,\n    \"issues\": [\n      { \"field\": \"controlMeasures\", \"message\": \"Gas test / gas monitoring is required for Hot Work permits\" },\n      { \"field\": \"attachments\", \"message\": \"Supporting documents (P&ID, risk assessment) required for this permit type\" }\n    ],\n    \"suggestions\": [\n      \"Add continuous gas monitoring as a control measure\",\n      \"Attach P&ID diagram and isolation certificate\",\n      \"Consider adding a fire watch to control measures\"\n    ]\n  },\n  \"metadata\": { \"promptTokens\": 780, \"completionTokens\": 290 }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fraud (Feature 2 — Behavioral Anomaly Detection)",
+      "description": "Fraud and consistency checks for permits, users, and facility-wide batch scans.\n\n- **permit-check**: Runs self-approval, signature role mismatch, credential sharing, timestamp tampering, isolation integrity, audit trail, and duplicate checks on a single permit.\n- **user-anomaly**: Computes behavioral baseline and flags statistical deviations (>2 std dev) for a specific user.\n- **scan**: Batch rule-based fraud scan across multiple permits + user activity for a facility/date range.",
+      "item": [
+        {
+          "name": "Permit Fraud Check",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/fraud/permit-check",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "fraud", "permit-check"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permit\": {\n    \"id\": 42,\n    \"issuerId\": 5,\n    \"approverId\": 5,\n    \"status\": \"approved\",\n    \"workType\": \"Hot Work - Welding/Cutting\",\n    \"workArea\": \"Process Areas\",\n    \"created_at\": \"2026-04-01T08:00:00Z\",\n    \"signatures\": [\n      {\n        \"userId\": 5,\n        \"userName\": \"John Smith\",\n        \"role\": \"HSE Manager\",\n        \"signedAt\": \"2026-04-01T09:00:00Z\",\n        \"signatureType\": \"issuer\",\n        \"ipAddress\": \"192.168.1.10\",\n        \"userAgent\": \"Mozilla/5.0\"\n      },\n      {\n        \"userId\": 7,\n        \"userName\": \"Ada Nwosu\",\n        \"role\": \"HSE Manager\",\n        \"signedAt\": \"2026-04-01T09:00:02Z\",\n        \"signatureType\": \"approver\",\n        \"ipAddress\": \"192.168.1.10\",\n        \"userAgent\": \"Mozilla/5.0\"\n      }\n    ],\n    \"isolationSections\": [\n      { \"isolatorId\": \"12\", \"verifierId\": \"12\", \"isolatorConfirmedAt\": \"2026-04-01T10:00:00Z\", \"verifierApprovedAt\": \"2026-04-01T09:50:00Z\" }\n    ]\n  },\n  \"auditLogs\": [\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 42, \"created_at\": \"2026-04-01T09:30:00Z\" }\n  ],\n  \"userRoles\": {\n    \"7\": \"Requestor\"\n  },\n  \"similarPermits\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Runs all fraud and consistency checks on a single permit.\n\n**Checks performed:**\n- Self-approval (issuerId === approverId)\n- Signature role mismatch (claimed role ≠ actual role)\n- Credential sharing (same IP+UserAgent, different users, <60s apart)\n- Timestamp tampering (signature before permit creation)\n- Isolation self-verify (same person isolates and verifies)\n- Restoration self-verify (same person restores and verifies)\n- Isolation timestamp sequence (verifier before isolator)\n- Missing audit trail (approved with no submit_permit entry)\n- Near-duplicate detection\n- AI contextual anomaly enrichment\n\n**Input:** permit data, auditLogs, userRoles map (userId → roleName), similarPermits\n**Returns:** flagged, severity, riskScore, summary, anomalies array"
+          },
+          "response": [
+            {
+              "name": "200 OK — Flagged",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"permitId\": 42,\n    \"flagged\": true,\n    \"severity\": \"CRITICAL\",\n    \"riskScore\": 0.87,\n    \"summary\": \"Permit 42 exhibits multiple high-severity fraud indicators including self-approval and credential sharing.\",\n    \"anomalies\": [\n      { \"type\": \"SELF_APPROVAL\", \"description\": \"issuerId (5) matches approverId (5)\", \"affectedFields\": [\"issuerId\", \"approverId\"], \"severity\": \"HIGH\" },\n      { \"type\": \"CREDENTIAL_SHARING\", \"description\": \"Multiple users (5, 7) signed from the same IP/device within 2000ms\", \"severity\": \"HIGH\" },\n      { \"type\": \"SIGNATURE_ROLE_MISMATCH\", \"description\": \"User 7 signed as 'HSE Manager' but actual role is 'Requestor'\", \"userId\": 7, \"severity\": \"HIGH\" },\n      { \"type\": \"ISOLATION_SELF_VERIFY\", \"description\": \"Same person (userId 12) is both isolator and verifier\", \"affectedFields\": [\"isolatorId\", \"verifierId\"], \"severity\": \"HIGH\" },\n      { \"type\": \"ISOLATION_TIMESTAMP_SEQUENCE\", \"description\": \"Verifier approved before isolator confirmed\", \"affectedFields\": [\"isolatorConfirmedAt\", \"verifierApprovedAt\"], \"severity\": \"MEDIUM\" },\n      { \"type\": \"MISSING_AUDIT_TRAIL\", \"description\": \"Permit is approved/active but has no 'submit_permit' audit entry\", \"affectedFields\": [\"audit_logs\"], \"severity\": \"MEDIUM\" }\n    ]\n  },\n  \"metadata\": { \"promptTokens\": 1050, \"completionTokens\": 480 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "User Anomaly Report",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/fraud/user-anomaly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "fraud", "user-anomaly"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 5,\n  \"user\": { \"name\": \"John Smith\", \"role\": \"HSE Manager\" },\n  \"auditLogs\": [\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 10, \"created_at\": \"2026-04-01T02:30:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 11, \"created_at\": \"2026-04-01T02:31:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 12, \"created_at\": \"2026-04-01T02:32:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 13, \"created_at\": \"2026-04-01T09:00:00Z\" },\n    { \"action\": \"submit_permit\", \"userId\": 5, \"permitId\": 14, \"created_at\": \"2026-04-01T09:15:00Z\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Behavioral anomaly report for a specific user.\n\n**Baseline metrics computed:**\n- Per-hour action frequency (mean + 2× std dev threshold)\n- Off-hours activity detection (>6h from peak activity hour)\n- Approval ratio anomaly (>80% of permit actions are approvals)\n\n**Returns:** flagged, severity, riskScore, anomalies, behavioral baseline stats"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"userId\": 5,\n    \"flagged\": true,\n    \"severity\": \"MEDIUM\",\n    \"riskScore\": 0.61,\n    \"summary\": \"User 5 shows off-hours approval activity at 02:30 UTC, which deviates from their typical 09:00–17:00 pattern.\",\n    \"anomalies\": [\n      { \"type\": \"OFF_HOURS_ACTIVITY\", \"description\": \"60.0% of activity at hour 2:00 UTC (3 actions) — typical peak at 9:00 UTC\", \"severity\": \"MEDIUM\" }\n    ],\n    \"baseline\": {\n      \"totalActions\": 5,\n      \"activeDays\": 1,\n      \"avgActionsPerHour\": 2.5,\n      \"peakHourUTC\": 9,\n      \"topActions\": [\n        { \"action\": \"approve_permit\", \"count\": 4 },\n        { \"action\": \"submit_permit\", \"count\": 1 }\n      ]\n    }\n  },\n  \"metadata\": { \"promptTokens\": 680, \"completionTokens\": 260 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Batch Fraud Scan",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/fraud/scan",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "fraud", "scan"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facilityId\": 3,\n  \"from\": \"2026-03-01\",\n  \"to\": \"2026-03-31\",\n  \"permits\": [\n    { \"id\": 42, \"issuerId\": 5, \"approverId\": 5, \"status\": \"approved\", \"signatures\": [], \"isolationSections\": [] },\n    { \"id\": 43, \"issuerId\": 7, \"approverId\": 8, \"status\": \"active\", \"signatures\": [], \"isolationSections\": [] }\n  ],\n  \"auditLogs\": [\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 42, \"created_at\": \"2026-03-15T02:30:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 43, \"created_at\": \"2026-03-15T02:31:00Z\" }\n  ],\n  \"userRoles\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Batch fraud scan across all permits and users for a facility within a date range.\n\nRuns rule-based checks on every permit (no per-permit AI call for performance), then performs user-level frequency analysis. AI summarises the results and provides an executive overview.\n\n**Returns:** flaggedPermits list, flaggedUsers list, executiveSummary, topRisks, recommendedActions"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"scanPeriod\": { \"facilityId\": 3, \"from\": \"2026-03-01\", \"to\": \"2026-03-31\" },\n    \"summary\": { \"totalPermitsScanned\": 2, \"flaggedPermits\": 1, \"flaggedUsers\": 1, \"totalAuditLogsAnalysed\": 2 },\n    \"flaggedPermits\": [\n      { \"permitId\": 42, \"severity\": \"HIGH\", \"anomalyCount\": 1, \"types\": [\"SELF_APPROVAL\"] }\n    ],\n    \"flaggedUsers\": [\n      { \"userId\": \"5\", \"anomalyType\": \"HIGH_FREQUENCY\", \"detail\": \"2 actions in hour 2026-03-15T02 (threshold: 0.0)\" }\n    ],\n    \"executiveSummary\": \"1 of 2 scanned permits (50%) contain self-approval anomalies. User 5 shows unusual off-hours approval activity.\",\n    \"topRisks\": [\"Self-approval on permit 42\", \"Off-hours approval spikes by user 5\"],\n    \"recommendedActions\": [\"Immediately review permit 42 for regulatory compliance\", \"Audit user 5 activity for the past 30 days\"]\n  },\n  \"metadata\": { \"promptTokens\": 720, \"completionTokens\": 310 }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Analytics (Feature 3 — Trend & Predictive Analytics)",
+      "description": "Trend analysis, predictive risk modeling, incident correlation, and executive compliance reporting.\n\nAll endpoints accept a `permits` array (sourced from `GET /api/permits?page=1&limit=500` on the ePTW backend) and optional `auditLogs`.",
+      "item": [
+        {
+          "name": "Permit Trends",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/analytics/trends",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "analytics", "trends"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facilityId\": 3,\n  \"from\": \"2026-01-01\",\n  \"to\": \"2026-03-31\",\n  \"permits\": [\n    {\n      \"id\": 1, \"type\": \"Hot Work Permit\", \"workType\": \"Hot Work - Welding/Cutting\",\n      \"workArea\": \"Process Areas\", \"status\": \"approved\", \"severity\": \"High\",\n      \"likelihood\": \"Likely\", \"hazards\": [\"Fire\", \"H2S exposure\"],\n      \"workShift\": \"Day\", \"created_at\": \"2026-01-15T08:00:00Z\"\n    },\n    {\n      \"id\": 2, \"type\": \"CSE Permit\", \"workType\": \"Confined Space Entry\",\n      \"workArea\": \"Storage Tank Farm\", \"status\": \"rejected\", \"severity\": \"Severe\",\n      \"likelihood\": \"Very likely\", \"hazards\": [\"Asphyxiation\", \"H2S\", \"Engulfment\"],\n      \"workShift\": \"Night\", \"created_at\": \"2026-02-03T21:00:00Z\",\n      \"rejectionReason\": \"Incomplete gas test records\"\n    }\n  ],\n  \"auditLogs\": [\n    { \"action\": \"submit_permit\", \"userId\": 7, \"permitId\": 1, \"created_at\": \"2026-01-14T10:00:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 1, \"created_at\": \"2026-01-15T08:00:00Z\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Computes permit trend metrics from a batch of permits over a time range.\n\n**Computed metrics:**\n- Monthly permit volume (total, approved, rejected, suspended)\n- Top 10 hazard frequencies with percentages\n- Monthly average risk score trend\n- Top work areas by count and dominant severity\n- Work type distribution\n- Day vs Night shift breakdown\n- Top rejection reasons\n- Average approval time (from audit logs: submit_permit → approve_permit)\n- AI strategic insights and operational recommendations\n\n**Returns:** period, summary, permitVolume[], topHazards[], riskTrend[], topWorkAreas[], workTypeDistribution, shiftBreakdown, topRejectionReasons, insights"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"period\": { \"facilityId\": 3, \"from\": \"2026-01-01\", \"to\": \"2026-03-31\" },\n    \"summary\": { \"totalPermits\": 2, \"approvalRate\": 50.0, \"rejectionRate\": 50.0, \"approvalTimeAvgHours\": 22.0, \"highRiskPermits\": 2 },\n    \"permitVolume\": [\n      { \"month\": \"2026-01\", \"total\": 1, \"approved\": 1, \"rejected\": 0, \"suspended\": 0 },\n      { \"month\": \"2026-02\", \"total\": 1, \"approved\": 0, \"rejected\": 1, \"suspended\": 0 }\n    ],\n    \"topHazards\": [\n      { \"hazard\": \"H2S exposure\", \"count\": 2, \"percentage\": 100.0 },\n      { \"hazard\": \"Fire\", \"count\": 1, \"percentage\": 50.0 }\n    ],\n    \"riskTrend\": [\n      { \"month\": \"2026-01\", \"avgRiskScore\": 9.0, \"permitsWithHighRisk\": 1 },\n      { \"month\": \"2026-02\", \"avgRiskScore\": 16.0, \"permitsWithHighRisk\": 1 }\n    ],\n    \"topWorkAreas\": [\n      { \"workArea\": \"Process Areas\", \"count\": 1, \"avgRiskScore\": 9.0, \"dominantSeverity\": \"High\" }\n    ],\n    \"shiftBreakdown\": { \"Day\": 1, \"Night\": 1, \"Unknown\": 0 },\n    \"insights\": {\n      \"keyInsights\": [\"H2S exposure is present in 100% of permits — area-specific gas detection protocols must be reviewed.\"],\n      \"riskTrends\": \"Risk is escalating month-over-month, driven by an increase in Confined Space Entry permits at night.\",\n      \"operationalRecommendations\": [\"Increase gas tester availability for night shifts\", \"Mandate pre-permit gas test records for all CSE permits\"]\n    }\n  },\n  \"metadata\": { \"promptTokens\": 980, \"completionTokens\": 390 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Predictive Analytics",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/analytics/predictions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "analytics", "predictions"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facilityId\": 3,\n  \"permits\": [\n    { \"id\": 1, \"workType\": \"Hot Work - Welding/Cutting\", \"workArea\": \"Process Areas\", \"status\": \"approved\", \"severity\": \"High\", \"likelihood\": \"Likely\", \"workShift\": \"Day\", \"created_at\": \"2026-01-15T08:00:00Z\", \"approverId\": 5 },\n    { \"id\": 2, \"workType\": \"Confined Space Entry\", \"workArea\": \"Storage Tank Farm\", \"status\": \"rejected\", \"severity\": \"Severe\", \"likelihood\": \"Very likely\", \"workShift\": \"Night\", \"created_at\": \"2026-02-03T21:00:00Z\", \"approverId\": 5 },\n    { \"id\": 3, \"workType\": \"Hot Work - Welding/Cutting\", \"workArea\": \"Process Areas\", \"status\": \"submitted\", \"severity\": \"High\", \"likelihood\": \"Likely\", \"workShift\": \"Day\", \"created_at\": \"2026-03-10T09:00:00Z\", \"approverId\": 5 }\n  ],\n  \"auditLogs\": [\n    { \"action\": \"submit_permit\", \"userId\": 7, \"permitId\": 1, \"created_at\": \"2026-01-14T10:00:00Z\" },\n    { \"action\": \"approve_permit\", \"userId\": 5, \"permitId\": 1, \"created_at\": \"2026-01-15T08:00:00Z\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Predicts upcoming high-risk periods, approval bottlenecks, and recommended proactive actions based on historical permit patterns.\n\n**Computed patterns:**\n- Peak submission day of week\n- High-risk work areas (avg risk ≥6 or rejection rate ≥20%)\n- Approval bottleneck approvers (avg >24h or >5 pending permits)\n- Peak volume months\n\n**AI generates:** highRiskPeriods for next 4 weeks, predictedBottlenecks, recommendedActions"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"facilityId\": 3,\n    \"computedPatterns\": {\n      \"peakSubmissionDay\": \"Wednesday\",\n      \"highRiskAreas\": [\n        { \"area\": \"Storage Tank Farm\", \"count\": 1, \"avgRisk\": 16.0, \"rejectionRate\": 100.0 }\n      ],\n      \"bottleneckApprovers\": [\n        { \"userId\": \"5\", \"avgApprovalHours\": 22.0, \"pendingPermits\": 1 }\n      ],\n      \"peakMonths\": [\n        { \"month\": \"2026-01\", \"count\": 1 }\n      ]\n    },\n    \"highRiskPeriods\": [\n      { \"dateRange\": \"2026-04-07 to 2026-04-11\", \"reason\": \"Historical peak for Hot Work permits in Process Areas aligns with predicted maintenance window\", \"riskScore\": 0.82 }\n    ],\n    \"predictedBottlenecks\": [\n      { \"stage\": \"Approval\", \"estimatedDelayHours\": 28, \"affectedRole\": \"HSE Manager\", \"detail\": \"User 5 has 1 pending permit and 22h avg approval time — risk of queue build-up on high-volume days\" }\n    ],\n    \"recommendedActions\": [\n      \"Assign backup HSE Manager coverage for peak weeks\",\n      \"Pre-stage gas testing equipment for Storage Tank Farm\",\n      \"Implement mandatory pre-submission gas test records for CSE permits\"\n    ]\n  },\n  \"metadata\": { \"promptTokens\": 860, \"completionTokens\": 370 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Incident Correlation",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/analytics/incident-correlation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "analytics", "incident-correlation"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facilityId\": 3,\n  \"permits\": [\n    { \"id\": 1, \"workType\": \"Hot Work - Welding/Cutting\", \"workArea\": \"Process Areas\", \"status\": \"approved\", \"severity\": \"High\", \"likelihood\": \"Likely\", \"workShift\": \"Night\", \"hazards\": [\"Fire\", \"H2S\", \"Burns\", \"Flash\"] },\n    { \"id\": 2, \"workType\": \"Confined Space Entry\", \"workArea\": \"Process Areas\", \"status\": \"rejected\", \"severity\": \"Severe\", \"likelihood\": \"Very likely\", \"workShift\": \"Night\", \"hazards\": [\"Asphyxiation\", \"H2S\", \"Engulfment\"] },\n    { \"id\": 3, \"workType\": \"Hot Work - Welding/Cutting\", \"workArea\": \"Process Areas\", \"status\": \"suspended\", \"severity\": \"High\", \"likelihood\": \"Likely\", \"workShift\": \"Night\", \"hazards\": [\"Fire\", \"Explosion\"] }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Identifies which combinations of work type, area, shift, and hazard count correlate with higher historical incident risk.\n\n**Combinations analysed:**\n- workType | shift\n- workType | workArea\n- workType | workArea | shift (triple combo)\n- workArea | shift | hazard count bucket\n\n**Minimum sample size: 3 permits per combination.**\n\n**Returns:** correlations ranked by avg risk score, topRiskCombinations (triple), AI narrative insights and targeted mitigations"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"facilityId\": 3,\n    \"totalPermitsAnalysed\": 3,\n    \"correlations\": [\n      { \"factor\": \"Hot Work - Welding/Cutting | Process Areas | Night\", \"sampleSize\": 3, \"avgRiskScore\": 9.0, \"highRiskRate\": 100.0, \"rejectionRate\": 33.3, \"riskMultiplier\": 2.25, \"incidentRisk\": \"HIGH\", \"historicalRate\": 1.0 }\n    ],\n    \"topRiskCombinations\": [\n      { \"workType\": \"Hot Work - Welding/Cutting\", \"workArea\": \"Process Areas\", \"shift\": \"Night\", \"count\": 3, \"avgRiskScore\": 9.0, \"riskMultiplier\": 2.25 }\n    ],\n    \"insights\": {\n      \"correlationInsights\": [\"Night-shift Hot Work in Process Areas shows 100% high-risk rate across all sampled permits.\"],\n      \"mostCriticalCombinations\": [\"Hot Work at night in Process Areas — 2.25× risk multiplier\"],\n      \"mitigationRecommendations\": [\"Prohibit night-shift Hot Work in Process Areas without dual gas tester coverage\", \"Mandate SIMOPS review before any night-shift permit in Process Areas\"]\n    }\n  },\n  \"metadata\": { \"promptTokens\": 840, \"completionTokens\": 350 }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Compliance Report",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/agent/analytics/compliance-report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "agent", "analytics", "compliance-report"]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": 1,\n  \"from\": \"2026-01-01\",\n  \"to\": \"2026-03-31\",\n  \"permits\": [\n    { \"id\": 1, \"facilityId\": 3, \"status\": \"approved\", \"severity\": \"High\", \"likelihood\": \"Likely\", \"completionChecklist\": { \"gasTest\": true, \"toolboxTalk\": true, \"fireWatch\": false }, \"isolationSections\": [{\"isolatorId\": 12, \"verifierId\": 15, \"verifierApprovedAt\": \"2026-01-15T09:00:00Z\"}] },\n    { \"id\": 2, \"facilityId\": 3, \"status\": \"rejected\", \"severity\": \"Severe\", \"likelihood\": \"Very likely\", \"completionChecklist\": null, \"isolationSections\": [], \"rejectionReason\": \"Incomplete gas test records\" },\n    { \"id\": 3, \"facilityId\": 4, \"status\": \"closed\", \"severity\": \"Low\", \"likelihood\": \"Low\", \"completionChecklist\": { \"gasTest\": true, \"toolboxTalk\": true, \"fireWatch\": true }, \"isolationSections\": [] }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Executive-level compliance summary across all facilities in a company.\n\n**Computed metrics:**\n- Overall approval, rejection, suspension rates\n- Checklist completion rate (true/completed/done values in completionChecklist object)\n- Isolation completion rate (sections with verifierId + verifierApprovedAt)\n- Per-facility breakdown with compliance score\n- Top suspension reasons\n- AI executive summary, compliance rating (EXCELLENT/GOOD/FAIR/POOR), key risks, strategic recommendations\n\n**Returns:** reportPeriod, overallMetrics, facilityBreakdown, topSuspensionReasons, executiveInsights"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"reportPeriod\": { \"companyId\": 1, \"from\": \"2026-01-01\", \"to\": \"2026-03-31\" },\n    \"overallMetrics\": {\n      \"totalPermits\": 3,\n      \"approvalRate\": 66.7,\n      \"rejectionRate\": 33.3,\n      \"suspensionRate\": 0.0,\n      \"closedPermits\": 1,\n      \"highRiskRate\": 66.7,\n      \"checklistCompletionRate\": 83.3,\n      \"isolationCompletionRate\": 100.0\n    },\n    \"facilityBreakdown\": [\n      { \"facilityId\": \"3\", \"totalPermits\": 2, \"approvalRate\": 50.0, \"rejectionRate\": 50.0, \"highRiskRate\": 100.0, \"complianceScore\": 35.0 },\n      { \"facilityId\": \"4\", \"totalPermits\": 1, \"approvalRate\": 100.0, \"rejectionRate\": 0.0, \"highRiskRate\": 0.0, \"complianceScore\": 100.0 }\n    ],\n    \"topSuspensionReasons\": [],\n    \"executiveInsights\": {\n      \"complianceRating\": \"FAIR\",\n      \"executiveSummary\": \"Facility 3 shows a 50% rejection rate driven by incomplete gas test documentation. Facility 4 is fully compliant. Company-wide checklist completion at 83% requires attention.\",\n      \"keyRisks\": [\"High rejection rate at Facility 3\", \"Incomplete checklist completion across facilities\", \"100% high-risk permit rate at Facility 3\"],\n      \"recommendations\": [\"Mandate gas test records as a prerequisite for CSE permit submission\", \"Implement facility-level compliance dashboards\", \"Assign dedicated compliance officer to Facility 3\"]\n    }\n  },\n  \"metadata\": { \"promptTokens\": 910, \"completionTokens\": 420 }\n}"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

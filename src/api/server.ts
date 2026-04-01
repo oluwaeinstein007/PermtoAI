@@ -5,6 +5,9 @@ import { serve } from "@hono/node-server";
 import { errorHandler } from "./middleware/errorHandler.js";
 import toolsRouter from "./routes/tools.js";
 import agentRouter from "./routes/agent.js";
+import routingRouter from "./routes/routing.js";
+import fraudRouter from "./routes/fraud.js";
+import analyticsRouter from "./routes/analytics.js";
 
 const app = new Hono();
 
@@ -36,6 +39,15 @@ app.route("/api/v1/tools", toolsRouter);
 // Agent routes: orchestrated multi-step workflows
 app.route("/api/v1/agent", agentRouter);
 
+// Routing routes: intelligent permit routing & pre-submission checks (Feature 1)
+app.route("/api/v1/agent/routing", routingRouter);
+
+// Fraud routes: behavioral anomaly detection & consistency checks (Feature 2)
+app.route("/api/v1/agent/fraud", fraudRouter);
+
+// Analytics routes: trends, predictions, incident correlation, compliance (Feature 3)
+app.route("/api/v1/agent/analytics", analyticsRouter);
+
 // 404 fallback
 app.notFound((c) => {
   return c.json({ success: false, error: `Route not found: ${c.req.path}` }, 404);
@@ -58,6 +70,18 @@ serve({ fetch: app.fetch, port }, () => {
   console.log(`  POST http://localhost:${port}/api/v1/agent/full-assessment`);
   console.log(`  POST http://localhost:${port}/api/v1/agent/quick-assess`);
   console.log(`  POST http://localhost:${port}/api/v1/agent/simops-assess`);
+  console.log("\nRouting endpoints (Feature 1 — Intelligent Permit Routing):");
+  console.log(`  POST http://localhost:${port}/api/v1/agent/routing/recommend`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/routing/pre-submission-check`);
+  console.log("\nFraud endpoints (Feature 2 — Behavioral Anomaly Detection):");
+  console.log(`  POST http://localhost:${port}/api/v1/agent/fraud/permit-check`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/fraud/user-anomaly`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/fraud/scan`);
+  console.log("\nAnalytics endpoints (Feature 3 — Trend & Predictive Analytics):");
+  console.log(`  POST http://localhost:${port}/api/v1/agent/analytics/trends`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/analytics/predictions`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/analytics/incident-correlation`);
+  console.log(`  POST http://localhost:${port}/api/v1/agent/analytics/compliance-report`);
   console.log(
     "\nNote: MCP server runs separately on port 3000 (pnpm start --http)"
   );
