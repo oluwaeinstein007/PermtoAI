@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { errorHandler } from "./middleware/errorHandler.js";
 import toolsRouter from "./routes/tools.js";
@@ -10,6 +11,16 @@ import fraudRouter from "./routes/fraud.js";
 import analyticsRouter from "./routes/analytics.js";
 
 const app = new Hono();
+
+// CORS — allow all origins
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 // Global error handling
 app.use("*", errorHandler);
@@ -41,6 +52,29 @@ app.route("/api/v1/agent", agentRouter);
 
 // Routing routes: intelligent permit routing & pre-submission checks (Feature 1)
 app.route("/api/v1/agent/routing", routingRouter);
+
+// Alias routes: frontend calls /api/agent/permits/:id/... (no v1, permit ID in path)
+// Delegate to the same routing handlers, ignoring the ID (it comes in the request body)
+app.post("/api/agent/permits/:id/pre-submission-check", (c) =>
+  routingRouter.fetch(
+    new Request("http://localhost/pre-submission-check", {
+      method: "POST",
+      headers: c.req.raw.headers,
+      body: c.req.raw.body,
+    }),
+    c.env
+  )
+);
+app.post("/api/agent/permits/:id/recommend-routing", (c) =>
+  routingRouter.fetch(
+    new Request("http://localhost/recommend", {
+      method: "POST",
+      headers: c.req.raw.headers,
+      body: c.req.raw.body,
+    }),
+    c.env
+  )
+);
 
 // Fraud routes: behavioral anomaly detection & consistency checks (Feature 2)
 app.route("/api/v1/agent/fraud", fraudRouter);
