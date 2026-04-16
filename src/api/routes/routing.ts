@@ -14,13 +14,13 @@ const PermitDataSchema = z.object({
   jobType: z.string().optional(),
   severity: z.string().optional(), // Low / Moderate / High / Severe
   likelihood: z.string().optional(), // Low / Unlikely / Likely / Very likely
-  hazards: z.array(z.union([z.string(), z.record(z.unknown())])).optional().default([]),
-  controlMeasures: z.array(z.union([z.string(), z.record(z.unknown())])).optional().default([]),
-  isolationSections: z.array(z.record(z.unknown())).optional().default([]),
+  hazards: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
+  controlMeasures: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
+  isolationSections: z.array(z.record(z.unknown())).default([]),
   startDate: z.string().optional().nullable(),
   endDate: z.string().optional().nullable(),
   workShift: z.string().optional(),
-  attachments: z.array(z.unknown()).optional().default([]),
+  attachments: z.array(z.unknown()).default([]),
   created_at: z.string().optional(),
 });
 
@@ -28,14 +28,14 @@ const UserSchema = z.object({
   userId: z.union([z.number(), z.string()]),
   name: z.string(),
   role: z.string(),
-  currentQueue: z.number().optional().default(0),
+  currentQueue: z.number().default(0),
 });
 
 const RecommendRoutingBodySchema = z.object({
   permit: PermitDataSchema,
-  availableUsers: z.array(UserSchema).optional().default([]),
+  availableUsers: z.array(UserSchema).default([]),
   // Active & pending permits at the same facility for SIMOPS
-  activePermits: z.array(z.record(z.unknown())).optional().default([]),
+  activePermits: z.array(z.record(z.unknown())).default([]),
   // Expected risk controls from GET /api/risk-assessment-options
   riskOptions: z.record(z.unknown()).optional(),
 });

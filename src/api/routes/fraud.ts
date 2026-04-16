@@ -19,20 +19,20 @@ const SignatureSchema = z.object({
 });
 
 const IsolationSectionSchema = z.object({
-  isolatorId: z.union([z.number(), z.string()]).optional().nullable(),
-  verifierId: z.union([z.number(), z.string()]).optional().nullable(),
-  restoredById: z.union([z.number(), z.string()]).optional().nullable(),
-  verifiedById: z.union([z.number(), z.string()]).optional().nullable(),
-  isolatorConfirmedAt: z.string().optional().nullable(),
-  verifierApprovedAt: z.string().optional().nullable(),
-  equipmentId: z.union([z.number(), z.string()]).optional().nullable(),
+  isolatorId: z.union([z.number(), z.string()]).nullish(),
+  verifierId: z.union([z.number(), z.string()]).nullish(),
+  restoredById: z.union([z.number(), z.string()]).nullish(),
+  verifiedById: z.union([z.number(), z.string()]).nullish(),
+  isolatorConfirmedAt: z.string().nullish(),
+  verifierApprovedAt: z.string().nullish(),
+  equipmentId: z.union([z.number(), z.string()]).nullish(),
 });
 
 const AuditLogSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
   action: z.string(),
   userId: z.union([z.number(), z.string()]),
-  permitId: z.union([z.number(), z.string()]).optional().nullable(),
+  permitId: z.union([z.number(), z.string()]).nullish(),
   metadata: z.record(z.unknown()).optional(),
   created_at: z.string(),
 });
@@ -68,17 +68,17 @@ const PermitCheckBodySchema = z.object({
     status: z.string().optional(),
     type: z.string().optional(),
     workType: z.string().optional(),
-    workArea: z.string().optional().nullable(),
+    workArea: z.string().nullish(),
     created_at: z.string().optional(),
-    startDate: z.string().optional().nullable(),
-    signatures: z.array(SignatureSchema).optional().default([]),
-    isolationSections: z.array(IsolationSectionSchema).optional().default([]),
+    startDate: z.string().nullish(),
+    signatures: z.array(SignatureSchema).default([]),
+    isolationSections: z.array(IsolationSectionSchema).default([]),
   }),
-  auditLogs: z.array(AuditLogSchema).optional().default([]),
+  auditLogs: z.array(AuditLogSchema).default([]),
   // Map of userId → actual role name (sourced from GET /api/admin/users/:id)
-  userRoles: z.record(z.string()).optional().default({}),
+  userRoles: z.record(z.string()).default({}),
   // Recent permits from the same issuer in the same area (for duplicate check)
-  similarPermits: z.array(z.record(z.unknown())).optional().default([]),
+  similarPermits: z.array(z.record(z.unknown())).default([]),
 });
 
 fraudRouter.post("/permit-check", async (c) => {
@@ -304,7 +304,7 @@ Identify additional fraud patterns or anomalies.`,
 // Computes activity baseline and detects statistical deviations (>2 std dev).
 const UserAnomalyBodySchema = z.object({
   userId: z.union([z.number(), z.string()]),
-  auditLogs: z.array(AuditLogSchema),
+  auditLogs: z.array(AuditLogSchema).default([]),
   // Optional: user metadata for context
   user: z
     .object({
@@ -506,12 +506,12 @@ const ScanBodySchema = z.object({
       workType: z.string().optional(),
       workArea: z.string().optional().nullable(),
       created_at: z.string().optional(),
-      signatures: z.array(SignatureSchema).optional().default([]),
-      isolationSections: z.array(IsolationSectionSchema).optional().default([]),
+      signatures: z.array(SignatureSchema).default([]),
+      isolationSections: z.array(IsolationSectionSchema).default([]),
     })
   ),
-  auditLogs: z.array(AuditLogSchema).optional().default([]),
-  userRoles: z.record(z.string()).optional().default({}),
+  auditLogs: z.array(AuditLogSchema).default([]),
+  userRoles: z.record(z.string()).default({}),
   facilityId: z.union([z.number(), z.string()]).optional(),
   from: z.string().optional(),
   to: z.string().optional(),

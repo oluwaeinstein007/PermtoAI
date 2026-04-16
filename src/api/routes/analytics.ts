@@ -9,27 +9,27 @@ const analyticsRouter = new Hono();
 const PermitRecordSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
   type: z.string().optional(),
-  workType: z.string().optional(),
-  workArea: z.string().optional().nullable(),
+  workType: z.string().nullish(),
+  workArea: z.string().nullish(),
   status: z.string().optional(),
-  severity: z.string().optional(),
-  likelihood: z.string().optional(),
+  severity: z.string().nullish(),
+  likelihood: z.string().nullish(),
   hazards: z.union([z.array(z.unknown()), z.string()]).optional(),
   controlMeasures: z.union([z.array(z.unknown()), z.string()]).optional(),
   workShift: z.string().optional(),
   activeDays: z.union([z.array(z.string()), z.string()]).optional(),
-  startDate: z.string().optional().nullable(),
-  endDate: z.string().optional().nullable(),
-  closed_at: z.string().optional().nullable(),
+  startDate: z.string().nullish(),
+  endDate: z.string().nullish(),
+  closed_at: z.string().nullish(),
   created_at: z.string().optional(),
-  rejectionReason: z.string().optional().nullable(),
-  suspensionReason: z.string().optional().nullable(),
-  completionChecklist: z.record(z.unknown()).optional().nullable(),
+  rejectionReason: z.string().nullish(),
+  suspensionReason: z.string().nullish(),
+  completionChecklist: z.record(z.unknown()).nullish(),
   isolationSections: z.union([z.array(z.unknown()), z.string()]).optional(),
-  issuerId: z.union([z.number(), z.string()]).optional().nullable(),
-  approverId: z.union([z.number(), z.string()]).optional().nullable(),
-  facilityId: z.union([z.number(), z.string()]).optional().nullable(),
-  companyId: z.union([z.number(), z.string()]).optional().nullable(),
+  issuerId: z.union([z.number(), z.string()]).nullish(),
+  approverId: z.union([z.number(), z.string()]).nullish(),
+  facilityId: z.union([z.number(), z.string()]).nullish(),
+  companyId: z.union([z.number(), z.string()]).nullish(),
 });
 
 type PermitRecord = z.infer<typeof PermitRecordSchema>;
@@ -84,7 +84,6 @@ const TrendsBodySchema = z.object({
         created_at: z.string(),
       })
     )
-    .optional()
     .default([]),
   facilityId: z.union([z.number(), z.string()]).optional(),
   from: z.string().optional(),
@@ -317,7 +316,6 @@ const PredictionsBodySchema = z.object({
         created_at: z.string(),
       })
     )
-    .optional()
     .default([]),
   facilityId: z.union([z.number(), z.string()]).optional(),
 });

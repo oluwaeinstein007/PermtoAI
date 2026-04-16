@@ -43,6 +43,14 @@ export interface ChatCompletionResult {
  * Call Gemini chat completion with structured JSON output.
  * Temperature is set to 0 for safety-critical consistency.
  */
+export class AIUnavailableError extends Error {
+  constructor(cause: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause);
+    super(`AI service unavailable: ${msg}`);
+    this.name = "AIUnavailableError";
+  }
+}
+
 export async function chatCompletion(
   messages: ChatMessage[],
   jsonMode: boolean = true
@@ -55,24 +63,42 @@ export async function chatCompletion(
     parts: [{ text: m.content }],
   }));
 
-  const response = await getGenAI().models.generateContent({
-    model: env.GEMINI_MODEL,
-    contents,
-    config: {
-      systemInstruction: systemMsg?.content,
-      temperature: env.AI_TEMPERATURE,
-      responseMimeType: jsonMode ? "application/json" : undefined,
-    },
-  });
+  try {
+    const response = await getGenAI().models.generateContent({
+      model: env.GEMINI_MODEL,
+      contents,
+      config: {
+        systemInstruction: systemMsg?.content,
+        temperature: env.AI_TEMPERATURE,
+        responseMimeType: jsonMode ? "application/json" : undefined,
+      },
+    });
 
-  const text = response.text;
-  if (!text) {
-    throw new Error("No text returned from Gemini");
+    const text = response.text;
+    if (!text) {
+      throw new Error("No text returned from Gemini");
+    }
+
+    return {
+      content: text,
+      promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
+      completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+    };
+  } catch (err) {
+    // Wrap network/fetch errors so callers can distinguish AI failures
+    // from application errors and degrade gracefully.
+    if (err instanceof AIUnavailableError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes("fetch failed") ||
+      msg.includes("ECONNREFUSED") ||
+      msg.includes("ENOTFOUND") ||
+      msg.includes("ETIMEDOUT") ||
+      msg.includes("network") ||
+      msg.includes("TypeError: fetch")
+    ) {
+      throw new AIUnavailableError(err);
+    }
+    throw err;
   }
-
-  return {
-    content: text,
-    promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
-    completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-  };
 }
