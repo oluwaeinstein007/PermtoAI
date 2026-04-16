@@ -19,7 +19,7 @@ const PermitDataSchema = z.object({
   isolationSections: z.array(z.record(z.string(), z.unknown())).default([]),
   startDate: z.string().nullish(),
   endDate: z.string().nullish(),
-  workShift: z.string().optional(),
+  workShift: z.string().nullish(),
   attachments: z.array(z.unknown()).default([]),
   created_at: z.string().optional(),
 });
