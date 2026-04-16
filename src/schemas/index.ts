@@ -19,7 +19,7 @@ export const HazardSchema = z.object({
   likelihood: RatingSchema.describe("1=rare, 5=almost certain"),
   severity: RatingSchema.describe("1=negligible, 5=catastrophic"),
   recommendedControls: z.array(z.string()).describe("Specific control measures"),
-  regulatoryRefs: z.array(z.string()).optional().describe("Applicable regulatory references — DPR EGASPIN, ISO 45001, IOGP, etc."),
+  regulatoryRefs: z.array(z.string()).describe("Applicable regulatory references — DPR EGASPIN, ISO 45001, IOGP, etc.").optional(),
   explanation: z.string().describe("Rationale for why this hazard is relevant"),
 });
 export type Hazard = z.infer<typeof HazardSchema>;
@@ -37,17 +37,17 @@ export type RiskScore = z.infer<typeof RiskScoreSchema>;
 // ─── Job Context (input to hazard engine) ───
 export const JobContextSchema = z.object({
   jobType: z.string().describe("Type of job, e.g. 'Hot Work', 'Confined Space Entry'"),
-  location: z.string().optional().describe("Work location"),
-  environment: z.string().optional().describe("Environmental conditions, e.g. 'Offshore platform', 'Sour gas field'"),
-  equipment: z.array(z.string()).optional().describe("Equipment being used"),
+  location: z.string().describe("Work location").optional(),
+  environment: z.string().describe("Environmental conditions, e.g. 'Offshore platform', 'Sour gas field'").optional(),
+  equipment: z.array(z.string()).describe("Equipment being used").optional(),
   contractor: z
     .object({
       name: z.string(),
       tier: z.number().int().min(1).max(3),
     })
-    .optional()
-    .describe("Contractor details"),
-  description: z.string().optional().describe("Free-text job description"),
+    .describe("Contractor details")
+    .optional(),
+  description: z.string().describe("Free-text job description").optional(),
 });
 export type JobContext = z.infer<typeof JobContextSchema>;
 
