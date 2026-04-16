@@ -33,7 +33,7 @@ const AuditLogSchema = z.object({
   action: z.string(),
   userId: z.union([z.number(), z.string()]),
   permitId: z.union([z.number(), z.string()]).nullish(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   created_at: z.string(),
 });
 
@@ -76,9 +76,9 @@ const PermitCheckBodySchema = z.object({
   }),
   auditLogs: z.array(AuditLogSchema).default([]),
   // Map of userId → actual role name (sourced from GET /api/admin/users/:id)
-  userRoles: z.record(z.string()).default({}),
+  userRoles: z.record(z.string(), z.string()).default({}),
   // Recent permits from the same issuer in the same area (for duplicate check)
-  similarPermits: z.array(z.record(z.unknown())).default([]),
+  similarPermits: z.array(z.record(z.string(), z.unknown())).default([]),
 });
 
 fraudRouter.post("/permit-check", async (c) => {
@@ -511,7 +511,7 @@ const ScanBodySchema = z.object({
     })
   ),
   auditLogs: z.array(AuditLogSchema).default([]),
-  userRoles: z.record(z.string()).default({}),
+  userRoles: z.record(z.string(), z.string()).default({}),
   facilityId: z.union([z.number(), z.string()]).optional(),
   from: z.string().optional(),
   to: z.string().optional(),

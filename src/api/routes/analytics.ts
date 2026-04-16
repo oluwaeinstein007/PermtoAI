@@ -24,7 +24,7 @@ const PermitRecordSchema = z.object({
   created_at: z.string().optional(),
   rejectionReason: z.string().nullish(),
   suspensionReason: z.string().nullish(),
-  completionChecklist: z.record(z.unknown()).nullish(),
+  completionChecklist: z.record(z.string(), z.unknown()).nullish(),
   isolationSections: z.union([z.array(z.unknown()), z.string()]).nullish(),
   issuerId: z.union([z.number(), z.string()]).nullish(),
   approverId: z.union([z.number(), z.string()]).nullish(),

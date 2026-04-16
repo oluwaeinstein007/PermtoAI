@@ -14,9 +14,9 @@ const PermitDataSchema = z.object({
   jobType: z.string().optional(),
   severity: z.string().optional(), // Low / Moderate / High / Severe
   likelihood: z.string().optional(), // Low / Unlikely / Likely / Very likely
-  hazards: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
-  controlMeasures: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
-  isolationSections: z.array(z.record(z.unknown())).default([]),
+  hazards: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])).default([]),
+  controlMeasures: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])).default([]),
+  isolationSections: z.array(z.record(z.string(), z.unknown())).default([]),
   startDate: z.string().nullish(),
   endDate: z.string().nullish(),
   workShift: z.string().optional(),
@@ -35,14 +35,14 @@ const RecommendRoutingBodySchema = z.object({
   permit: PermitDataSchema,
   availableUsers: z.array(UserSchema).default([]),
   // Active & pending permits at the same facility for SIMOPS
-  activePermits: z.array(z.record(z.unknown())).default([]),
+  activePermits: z.array(z.record(z.string(), z.unknown())).default([]),
   // Expected risk controls from GET /api/risk-assessment-options
-  riskOptions: z.record(z.unknown()).optional(),
+  riskOptions: z.record(z.string(), z.unknown()).optional(),
 });
 
 const PreSubmissionBodySchema = z.object({
   permit: PermitDataSchema,
-  riskOptions: z.record(z.unknown()).optional(),
+  riskOptions: z.record(z.string(), z.unknown()).optional(),
 });
 
 // ─── Risk helpers ─────────────────────────────────────────────────────────────
