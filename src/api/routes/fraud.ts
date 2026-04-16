@@ -103,6 +103,16 @@ fraudRouter.post("/permit-check", async (c) => {
     });
   }
 
+  // Check 1b: Missing approver
+  if (permit.issuerId != null && permit.approverId == null) {
+    anomalies.push({
+      type: "MISSING_APPROVER",
+      description: "Permit has an issuer but no approver assigned",
+      affectedFields: ["approverId"],
+      severity: "CRITICAL",
+    });
+  }
+
   // Check 2: Signature role mismatch
   for (const sig of permit.signatures) {
     const actualRole = userRoles[String(sig.userId)];
@@ -512,6 +522,7 @@ const ScanBodySchema = z.object({
   ),
   auditLogs: z.array(AuditLogSchema).default([]),
   userRoles: z.record(z.string(), z.string()).default({}),
+  userNames: z.record(z.string(), z.string()).default({}),
   facilityId: z.union([z.number(), z.string()]).optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -519,7 +530,7 @@ const ScanBodySchema = z.object({
 
 fraudRouter.post("/scan", async (c) => {
   const body = await c.req.json();
-  const { permits, auditLogs, userRoles, facilityId, from, to } = ScanBodySchema.parse(body);
+  const { permits, auditLogs, userRoles, userNames, facilityId, from, to } = ScanBodySchema.parse(body);
 
   console.log(
     `[API] fraud/scan — facilityId=${facilityId ?? "all"}, permits=${permits.length}, logs=${auditLogs.length}`
@@ -546,6 +557,15 @@ fraudRouter.post("/scan", async (c) => {
         type: "SELF_APPROVAL",
         description: `issuerId (${permit.issuerId}) matches approverId`,
         severity: "HIGH",
+      });
+    }
+
+    // Missing approver
+    if (permit.issuerId != null && permit.approverId == null) {
+      permAnomalies.push({
+        type: "MISSING_APPROVER",
+        description: "Permit has an issuer but no approver assigned",
+        severity: "CRITICAL",
       });
     }
 
@@ -598,7 +618,22 @@ fraudRouter.post("/scan", async (c) => {
     m.set(bucket, (m.get(bucket) ?? 0) + 1);
   }
 
-  const flaggedUsers: Array<{ userId: string; anomalyType: string; detail: string }> = [];
+  const flaggedUsers: Array<{ userId: string; userName?: string; anomalyType: string; detail: string }> = [];
+
+  // Zero-activity users: present in userRoles but absent from all audit logs
+  const usersWithActivity = new Set(auditLogs.map((l) => String(l.userId)));
+  for (const uid of Object.keys(userRoles)) {
+    if (!usersWithActivity.has(uid)) {
+      flaggedUsers.push({
+        userId: uid,
+        ...(userNames[uid] && { userName: userNames[uid] }),
+        anomalyType: "NO_ACTIVITY",
+        detail: "User has no recorded audit log entries in the scan period",
+      });
+    }
+  }
+
+  // High-frequency spike detection
   for (const [uid, buckets] of userActionCounts) {
     const counts = Array.from(buckets.values());
     const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
@@ -608,6 +643,7 @@ fraudRouter.post("/scan", async (c) => {
       if (count > threshold && count > 10) {
         flaggedUsers.push({
           userId: uid,
+          ...(userNames[uid] && { userName: userNames[uid] }),
           anomalyType: "HIGH_FREQUENCY",
           detail: `${count} actions in hour ${bucket} (threshold: ${threshold.toFixed(1)})`,
         });
@@ -641,7 +677,7 @@ Flagged Permit Summary:
 ${flaggedPermits.slice(0, 10).map((fp) => `  Permit ${fp.permitId}: [${fp.severity}] ${fp.types.join(", ")}`).join("\n") || "  None"}
 
 Flagged User Summary:
-${flaggedUsers.slice(0, 10).map((fu) => `  User ${fu.userId}: ${fu.anomalyType} — ${fu.detail}`).join("\n") || "  None"}
+${flaggedUsers.slice(0, 10).map((fu) => `  ${fu.userName ?? `User ${fu.userId}`}: ${fu.anomalyType} — ${fu.detail}`).join("\n") || "  None"}
 
 Provide executive summary and recommended actions.`,
     },
