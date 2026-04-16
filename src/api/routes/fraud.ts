@@ -63,8 +63,8 @@ function maxSeverity(anomalies: Anomaly[]): "NONE" | "LOW" | "MEDIUM" | "HIGH" |
 const PermitCheckBodySchema = z.object({
   permit: z.object({
     id: z.union([z.number(), z.string()]),
-    issuerId: z.union([z.number(), z.string()]).optional().nullable(),
-    approverId: z.union([z.number(), z.string()]).optional().nullable(),
+    issuerId: z.union([z.number(), z.string()]).nullish(),
+    approverId: z.union([z.number(), z.string()]).nullish(),
     status: z.string().optional(),
     type: z.string().optional(),
     workType: z.string().optional(),
@@ -500,11 +500,11 @@ const ScanBodySchema = z.object({
   permits: z.array(
     z.object({
       id: z.union([z.number(), z.string()]),
-      issuerId: z.union([z.number(), z.string()]).optional().nullable(),
-      approverId: z.union([z.number(), z.string()]).optional().nullable(),
+      issuerId: z.union([z.number(), z.string()]).nullish(),
+      approverId: z.union([z.number(), z.string()]).nullish(),
       status: z.string().optional(),
       workType: z.string().optional(),
-      workArea: z.string().optional().nullable(),
+      workArea: z.string().nullish(),
       created_at: z.string().optional(),
       signatures: z.array(SignatureSchema).default([]),
       isolationSections: z.array(IsolationSectionSchema).default([]),

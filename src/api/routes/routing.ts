@@ -10,15 +10,15 @@ const PermitDataSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
   type: z.string().optional(),
   workType: z.string(),
-  workArea: z.string().optional().nullable(),
+  workArea: z.string().nullish(),
   jobType: z.string().optional(),
   severity: z.string().optional(), // Low / Moderate / High / Severe
   likelihood: z.string().optional(), // Low / Unlikely / Likely / Very likely
   hazards: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
   controlMeasures: z.array(z.union([z.string(), z.record(z.unknown())])).default([]),
   isolationSections: z.array(z.record(z.unknown())).default([]),
-  startDate: z.string().optional().nullable(),
-  endDate: z.string().optional().nullable(),
+  startDate: z.string().nullish(),
+  endDate: z.string().nullish(),
   workShift: z.string().optional(),
   attachments: z.array(z.unknown()).default([]),
   created_at: z.string().optional(),

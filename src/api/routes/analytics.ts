@@ -80,7 +80,7 @@ const TrendsBodySchema = z.object({
       z.object({
         action: z.string(),
         userId: z.union([z.number(), z.string()]).optional(),
-        permitId: z.union([z.number(), z.string()]).optional().nullable(),
+        permitId: z.union([z.number(), z.string()]).nullish(),
         created_at: z.string(),
       })
     )
@@ -312,7 +312,7 @@ const PredictionsBodySchema = z.object({
       z.object({
         action: z.string(),
         userId: z.union([z.number(), z.string()]).optional(),
-        permitId: z.union([z.number(), z.string()]).optional().nullable(),
+        permitId: z.union([z.number(), z.string()]).nullish(),
         created_at: z.string(),
       })
     )
