@@ -21,12 +21,13 @@ It is designed for compliance with:
 
 ### Prerequisites
 
-| Requirement | Version |
+| Requirement | Version / Notes |
 |---|---|
 | Node.js | ≥ 18 |
 | pnpm | ≥ 10 |
-| Qdrant | Running locally or cloud URL |
+| Qdrant | Local (`docker-compose up`) or cloud instance |
 | Google AI API key | Gemini access required |
+| pdftotext | `sudo apt install poppler-utils` (for compliance ingestion) |
 
 ### 1. Install dependencies
 
@@ -41,14 +42,20 @@ Create a `.env` file in the project root:
 ```env
 # Google Gemini (required)
 GOOGLE_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash-lite          # or gemini-2.0-flash, gemini-2.5-pro
 GOOGLE_EMBEDDING_MODEL=gemini-embedding-001
 EMBEDDING_DIMENSIONS=3072
+EMBEDDING_VECTOR_SIZE=3072                  # alias — either form is accepted
+EMBEDDING_PROVIDER=google
 
 # Qdrant vector database (required)
-QDRANT_URL=http://localhost:6333
-QDRANT_KEY=your_qdrant_api_key           # Leave empty for local Qdrant
-QDRANT_COLLECTION=permito_regulations
+# QDRANT_URL and QDRANT_HOST are both accepted — use whichever suits your client
+QDRANT_HOST=http://localhost:6333           # local Qdrant
+# QDRANT_HOST=https://your-cluster.cloud.qdrant.io   # Qdrant Cloud
+QDRANT_KEY=your_qdrant_api_key             # leave empty for local Qdrant
+
+# Collection names (QDRANT_COLLECTION and QDRANT_COLLECTION_NAME are both accepted)
+QDRANT_COLLECTION=permitoai                # regulations & work-type risk data
 QDRANT_INCIDENTS_COLLECTION=permito_incidents
 QDRANT_COMPLIANCE_COLLECTION=permito_compliance_docs
 
@@ -63,49 +70,54 @@ PORT=3000        # MCP HTTP server
 API_PORT=4000    # REST API server
 ```
 
-### 3. Configure environment — add compliance collection
+> **Qdrant Cloud:** Set `QDRANT_HOST` to your cluster URL and `QDRANT_KEY` to your API key. The system uses `QDRANT_HOST` or `QDRANT_URL` interchangeably.
 
-Add to `.env`:
+### 3. Seed the vector database
 
-```env
-QDRANT_COMPLIANCE_COLLECTION=permito_compliance_docs
-```
-
-### 4. Seed the vector database
-
-Populates Qdrant with DPR/IOGP regulations and historical incident data:
+Populates Qdrant with DPR/IOGP regulations (40+ work types) and 17 synthetic historical incidents. **Must be run before starting the servers.**
 
 ```bash
 pnpm seed
 ```
 
-### 5. Ingest compliance documents (optional but recommended)
+This creates/recreates two collections:
+- `permitoai` (or whatever `QDRANT_COLLECTION` is set to) — work-type risk profiles
+- `permito_incidents` — historical incident records
 
-Chunks and embeds PDFs from `compliance_docs/` into Qdrant for grounded compliance checks:
+### 4. Ingest compliance documents (strongly recommended)
+
+Chunks, embeds, and stores PDFs from `compliance_docs/` into Qdrant. Powers grounded compliance checking via RAG.
 
 ```bash
-# Requires: pdftotext — sudo apt install poppler-utils
+# Ingest all PDFs in compliance_docs/
 pnpm ingest
 
 # Single file
 pnpm ingest -- --file IOGP_510.pdf
 
-# Rebuild from scratch
+# Rebuild the collection from scratch (drop + re-ingest all)
 pnpm ingest -- --clean
+
+# Re-ingest a single file (deletes its old chunks first)
+pnpm ingest -- --clean-file --file IOGP_510.pdf
 ```
 
-### 6. Start the servers
+Ingest is **idempotent** — re-running without `--clean` or `--clean-file` will upsert the same chunk IDs without creating duplicates.
+
+### 5. Start the servers
 
 ```bash
 # REST API server (port 4000)
 pnpm api
 
-# MCP server — stdio transport (for Claude/LLM integration)
+# MCP server — stdio transport (for Claude Desktop / claude-code)
 pnpm start
 
 # MCP server — HTTP transport (port 3000)
 pnpm start:http
 ```
+
+Both servers can run simultaneously. They share the same service layer.
 
 ---
 
