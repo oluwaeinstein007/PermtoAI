@@ -209,9 +209,17 @@ SimopsService.checkSimops(request, permits[])
 
 ## Vector database structure
 
-Three Qdrant collections are used:
+Three Qdrant collections are used. Names are configured via `.env` (defaults shown):
 
-### `permito_regulations`
+| Collection | Env var | Default | Populated by |
+|---|---|---|---|
+| Regulations | `QDRANT_COLLECTION` or `QDRANT_COLLECTION_NAME` | `permito_regulations` | `pnpm seed` |
+| Incidents | `QDRANT_INCIDENTS_COLLECTION` | `permito_incidents` | `pnpm seed` |
+| Compliance docs | `QDRANT_COMPLIANCE_COLLECTION` | `permito_compliance_docs` | `pnpm ingest` |
+
+> The production `.env` sets `QDRANT_COLLECTION=permitoai`. All three env var names are aliases — `config.ts` accepts both forms.
+
+### Regulations collection (`QDRANT_COLLECTION`)
 
 Populated by `pnpm seed`. Source: `workTypeRiskData.json` (40+ work type risk profiles).
 
@@ -229,9 +237,9 @@ Payload schema:
   residualRisk: string
 ```
 
-### `permito_incidents`
+### Incidents collection (`QDRANT_INCIDENTS_COLLECTION`)
 
-Populated by `pnpm seed`. Source: 17 synthetic historical incidents (defined in `seed.ts`).
+Populated by `pnpm seed`. Source: 18 synthetic historical incidents (defined in `seed.ts`).
 
 ```
 Payload schema:
@@ -243,7 +251,7 @@ Payload schema:
   location: string
 ```
 
-### `permito_compliance_docs`
+### Compliance docs collection (`QDRANT_COMPLIANCE_COLLECTION`)
 
 Populated by `pnpm ingest`. Source: PDFs in `compliance_docs/`.
 
@@ -276,7 +284,7 @@ Vector dimensions: **3072** (Google `gemini-embedding-001`) for all three collec
 
 | Setting | Value | Reason |
 |---|---|---|
-| Model | `gemini-2.0-flash` | Speed vs. capability balance for safety-critical use |
+| Model | `gemini-2.5-flash-lite` (configurable via `GEMINI_MODEL`) | Speed vs. capability balance for safety-critical use |
 | Temperature | `0` | Deterministic, consistent output — safety contexts require reproducibility |
 | Response format | JSON mode (`application/json`) | Structured output for all tool calls |
 | Embedding model | `gemini-embedding-001` | High-dimensional (3072) for precise regulation retrieval |

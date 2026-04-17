@@ -336,5 +336,36 @@ pnpm start         # Start MCP server (stdio transport)
 pnpm start:http    # Start MCP server (HTTP, port 3000)
 pnpm api           # Start REST API server (port 4000)
 pnpm seed          # Seed Qdrant with regulations and incident data
-pnpm ingest        # Ingest compliance PDFs from compliance_docs/
+pnpm ingest        # Ingest all compliance PDFs from compliance_docs/
+pnpm ingest -- --file IOGP_510.pdf     # Ingest a single file
+pnpm ingest -- --clean                 # Drop collection and re-ingest all
+pnpm ingest -- --clean-file            # Wipe per-file chunks and re-ingest
 ```
+
+---
+
+## Startup Order
+
+For a clean first-time setup:
+
+```
+1. pnpm install          — install dependencies
+2. Configure .env        — set GOOGLE_API_KEY, QDRANT_HOST, QDRANT_KEY, collection names
+3. pnpm seed             — seed regulations + incidents into Qdrant (~3 min)
+4. pnpm ingest           — ingest compliance PDFs into Qdrant (~10–20 min per file)
+5. pnpm api              — start REST API (port 4000)
+   pnpm start            — start MCP server (stdio) — run in separate terminal
+```
+
+> Steps 3 and 4 are one-time operations. Re-running `pnpm seed` drops and recreates the collections. Re-running `pnpm ingest` is idempotent (upserts same content hash IDs).
+
+### Qdrant Cloud Quick Setup
+
+1. Create a cluster at [cloud.qdrant.io](https://cloud.qdrant.io)
+2. Copy the cluster URL and API key
+3. Set in `.env`:
+   ```env
+   QDRANT_HOST=https://<your-cluster-id>.cloud.qdrant.io
+   QDRANT_KEY=<your-api-key>
+   ```
+4. Run `pnpm seed` then `pnpm ingest`
