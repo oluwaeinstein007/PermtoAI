@@ -536,6 +536,15 @@ fraudRouter.post("/scan", async (c) => {
     `[API] fraud/scan — facilityId=${facilityId ?? "all"}, permits=${permits.length}, logs=${auditLogs.length}`
   );
 
+  // Build a userId → name map from signature data, merged with any explicitly passed userNames
+  const resolvedUserNames: Record<string, string> = {};
+  for (const permit of permits) {
+    for (const sig of permit.signatures) {
+      if (sig.userName) resolvedUserNames[String(sig.userId)] = sig.userName;
+    }
+  }
+  Object.assign(resolvedUserNames, userNames); // explicit userNames take precedence
+
   const flaggedPermits: Array<{
     permitId: unknown;
     severity: string;
@@ -626,7 +635,7 @@ fraudRouter.post("/scan", async (c) => {
     if (!usersWithActivity.has(uid)) {
       flaggedUsers.push({
         userId: uid,
-        ...(userNames[uid] && { userName: userNames[uid] }),
+        ...(resolvedUserNames[uid] && { userName: resolvedUserNames[uid] }),
         anomalyType: "NO_ACTIVITY",
         detail: "User has no recorded audit log entries in the scan period",
       });
@@ -643,7 +652,7 @@ fraudRouter.post("/scan", async (c) => {
       if (count > threshold && count > 10) {
         flaggedUsers.push({
           userId: uid,
-          ...(userNames[uid] && { userName: userNames[uid] }),
+          ...(resolvedUserNames[uid] && { userName: resolvedUserNames[uid] }),
           anomalyType: "HIGH_FREQUENCY",
           detail: `${count} actions in hour ${bucket} (threshold: ${threshold.toFixed(1)})`,
         });
